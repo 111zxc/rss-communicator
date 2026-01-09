@@ -10,8 +10,8 @@ import (
 type LogConfig struct {
 	Level   string // debug|info|warn|error
 	Format  string // text|json
-	AddSrc  bool   // add source file:line
-	Service string // rssd / tg-bot
+	AddSrc  bool   // source file:line
+	Service string // rssd|tg-bot
 }
 
 func NewLogger(cfg LogConfig) *slog.Logger {
