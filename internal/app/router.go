@@ -25,6 +25,7 @@ func NewRouter(h *handler.Handler) http.Handler {
 		r.Route("/feeds", func(r chi.Router) {
 			r.Get("/", h.Feed.List)
 			r.Post("/", h.Feed.Create)
+			r.Patch("/{feedID}", h.Feed.Update)
 			r.Delete("/{feedID}", h.Feed.Delete)
 
 			r.Route("/{feedID}/subscriptions", func(r chi.Router) {

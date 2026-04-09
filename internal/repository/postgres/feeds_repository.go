@@ -15,7 +15,7 @@ func NewFeedsRepository(db *sql.DB) *FeedsRepository { return &FeedsRepository{d
 
 func (r *FeedsRepository) ListDue(ctx context.Context, now time.Time, limit int) ([]domain.Feed, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, url, name, enabled, interval_seconds, etag, last_modified, last_fetch_at, next_fetch_at, initialized_at
+		SELECT id, url, name, enabled, interval_seconds, batch_enabled, batch_window_seconds, etag, last_modified, last_fetch_at, next_fetch_at, initialized_at
 		FROM feeds
 		WHERE enabled = true AND (next_fetch_at IS NULL OR next_fetch_at <= $1)
 		ORDER BY COALESCE(next_fetch_at, to_timestamp(0)) ASC
@@ -32,7 +32,7 @@ func (r *FeedsRepository) ListDue(ctx context.Context, now time.Time, limit int)
 		var etag, lm sql.NullString
 		var lastFetch, nextFetch, initAt sql.NullTime
 
-		if err := rows.Scan(&f.ID, &f.URL, &f.Name, &f.Enabled, &f.IntervalSeconds, &etag, &lm, &lastFetch, &nextFetch, &initAt); err != nil {
+		if err := rows.Scan(&f.ID, &f.URL, &f.Name, &f.Enabled, &f.IntervalSeconds, &f.BatchEnabled, &f.BatchWindowSecs, &etag, &lm, &lastFetch, &nextFetch, &initAt); err != nil {
 			return nil, err
 		}
 		if etag.Valid {
@@ -87,7 +87,7 @@ func (r *FeedsRepository) MarkInitialized(ctx context.Context, feedID string, at
 
 func (r *FeedsRepository) GetByID(ctx context.Context, id string) (domain.Feed, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, url, name, enabled, interval_seconds, etag, last_modified, last_fetch_at, next_fetch_at, initialized_at
+		SELECT id, url, name, enabled, interval_seconds, batch_enabled, batch_window_seconds, etag, last_modified, last_fetch_at, next_fetch_at, initialized_at
 		FROM feeds WHERE id=$1
 	`, id)
 
@@ -95,7 +95,7 @@ func (r *FeedsRepository) GetByID(ctx context.Context, id string) (domain.Feed, 
 	var etag, lm sql.NullString
 	var lastFetch, nextFetch, initAt sql.NullTime
 
-	if err := row.Scan(&f.ID, &f.URL, &f.Name, &f.Enabled, &f.IntervalSeconds, &etag, &lm, &lastFetch, &nextFetch, &initAt); err != nil {
+	if err := row.Scan(&f.ID, &f.URL, &f.Name, &f.Enabled, &f.IntervalSeconds, &f.BatchEnabled, &f.BatchWindowSecs, &etag, &lm, &lastFetch, &nextFetch, &initAt); err != nil {
 		return domain.Feed{}, err
 	}
 	if etag.Valid {
@@ -119,9 +119,60 @@ func (r *FeedsRepository) GetByID(ctx context.Context, id string) (domain.Feed, 
 	return f, nil
 }
 
+func (r *FeedsRepository) UpdateBatching(ctx context.Context, feedID string, batchEnabled bool, batchWindowSecs int) (domain.Feed, error) {
+	row := r.db.QueryRowContext(ctx, `
+		UPDATE feeds
+		SET batch_enabled=$2, batch_window_seconds=$3, updated_at=now()
+		WHERE id=$1
+		RETURNING id, url, name, enabled, interval_seconds, batch_enabled, batch_window_seconds, etag, last_modified, last_fetch_at, next_fetch_at, initialized_at, created_at, updated_at
+	`, feedID, batchEnabled, batchWindowSecs)
+
+	var out domain.Feed
+	var etag, lm sql.NullString
+	var lastFetch, nextFetch, initAt sql.NullTime
+	if err := row.Scan(
+		&out.ID,
+		&out.URL,
+		&out.Name,
+		&out.Enabled,
+		&out.IntervalSeconds,
+		&out.BatchEnabled,
+		&out.BatchWindowSecs,
+		&etag,
+		&lm,
+		&lastFetch,
+		&nextFetch,
+		&initAt,
+		&out.CreatedAt,
+		&out.UpdatedAt,
+	); err != nil {
+		return domain.Feed{}, err
+	}
+	if etag.Valid {
+		out.ETag = &etag.String
+	}
+	if lm.Valid {
+		out.LastModified = &lm.String
+	}
+	if lastFetch.Valid {
+		t := lastFetch.Time
+		out.LastFetchAt = &t
+	}
+	if nextFetch.Valid {
+		t := nextFetch.Time
+		out.NextFetchAt = &t
+	}
+	if initAt.Valid {
+		t := initAt.Time
+		out.InitializedAt = &t
+	}
+	return out, nil
+}
+
 func (r *FeedsRepository) List(ctx context.Context, limit, offset int) ([]domain.Feed, int, error) {
 	const q = `
 SELECT id, name, url, enabled, interval_seconds,
+       batch_enabled, batch_window_seconds,
        next_fetch_at, last_fetch_at, initialized_at,
        created_at, updated_at
 FROM feeds
@@ -143,6 +194,8 @@ LIMIT $1 OFFSET $2
 			&f.URL,
 			&f.Enabled,
 			&f.IntervalSeconds,
+			&f.BatchEnabled,
+			&f.BatchWindowSecs,
 			&f.NextFetchAt,
 			&f.LastFetchAt,
 			&f.InitializedAt,
@@ -185,9 +238,9 @@ func (r *FeedsRepository) Delete(ctx context.Context, feedID string) error {
 
 func (r *FeedsRepository) Create(ctx context.Context, f domain.Feed) (domain.Feed, error) {
 	row := r.db.QueryRowContext(ctx, `
-		INSERT INTO feeds (url, name, enabled, interval_seconds)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id, url, name, enabled, interval_seconds,
+		INSERT INTO feeds (url, name, enabled, interval_seconds, batch_enabled, batch_window_seconds)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, url, name, enabled, interval_seconds, batch_enabled, batch_window_seconds,
 		          etag, last_modified, last_fetch_at, next_fetch_at, initialized_at,
 		          created_at, updated_at
 	`,
@@ -195,6 +248,8 @@ func (r *FeedsRepository) Create(ctx context.Context, f domain.Feed) (domain.Fee
 		f.Name,
 		f.Enabled,
 		f.IntervalSeconds,
+		f.BatchEnabled,
+		f.BatchWindowSecs,
 	)
 
 	var out domain.Feed
@@ -207,6 +262,8 @@ func (r *FeedsRepository) Create(ctx context.Context, f domain.Feed) (domain.Fee
 		&out.Name,
 		&out.Enabled,
 		&out.IntervalSeconds,
+		&out.BatchEnabled,
+		&out.BatchWindowSecs,
 		&etag,
 		&lm,
 		&lastFetch,

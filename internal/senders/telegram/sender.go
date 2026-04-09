@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
@@ -15,8 +16,12 @@ type Sender struct {
 
 func New(api *tgbotapi.BotAPI) *Sender { return &Sender{api: api} }
 
-func (s *Sender) Send(ctx context.Context, c domain.Contact, item domain.Item) error {
-	msgText := fmt.Sprintf("📰 %s\n%s", item.Title, item.Link)
+func (s *Sender) Send(ctx context.Context, c domain.Contact, feed domain.Feed, items []domain.Item) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	msgText := renderMessage(feed, items)
 
 	chatID, err := parseChatID(c.Value)
 	if err != nil {
@@ -32,6 +37,22 @@ func (s *Sender) Send(ctx context.Context, c domain.Contact, item domain.Item) e
 	}
 	_ = ctx
 	return nil
+}
+
+func renderMessage(feed domain.Feed, items []domain.Item) string {
+	if len(items) == 1 {
+		return fmt.Sprintf("📰 %s\n%s", items[0].Title, items[0].Link)
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "📰 %s\n%d new items\n\n", feed.Name, len(items))
+	for i, item := range items {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		fmt.Fprintf(&b, "%d. %s\n%s", i+1, item.Title, item.Link)
+	}
+	return b.String()
 }
 
 func parseChatID(v string) (int64, error) {

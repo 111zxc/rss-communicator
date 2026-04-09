@@ -7,5 +7,5 @@ import (
 )
 
 type Sender interface {
-	Send(ctx context.Context, c domain.Contact, item domain.Item) error
+	Send(ctx context.Context, c domain.Contact, feed domain.Feed, items []domain.Item) error
 }

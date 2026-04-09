@@ -8,6 +8,8 @@ type FeedResponse struct {
 	URL             string     `json:"url"`
 	Enabled         bool       `json:"enabled"`
 	IntervalSeconds int        `json:"interval_seconds"`
+	BatchEnabled    bool       `json:"batch_enabled"`
+	BatchWindowSecs int        `json:"batch_window_seconds"`
 	NextFetchAt     *time.Time `json:"next_fetch_at,omitempty"`
 	LastFetchAt     *time.Time `json:"last_fetch_at,omitempty"`
 	CreatedAt       time.Time  `json:"created_at"`

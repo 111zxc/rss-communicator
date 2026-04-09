@@ -8,6 +8,8 @@ type Feed struct {
 	Name            string
 	Enabled         bool
 	IntervalSeconds int
+	BatchEnabled    bool
+	BatchWindowSecs int
 	ETag            *string
 	LastModified    *string
 	LastFetchAt     *time.Time
@@ -89,4 +91,9 @@ type Delivery struct {
 	NextRetryAt   *time.Time
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+}
+
+type DeliveryWithItem struct {
+	Delivery Delivery
+	Item     Item
 }

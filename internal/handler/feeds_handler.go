@@ -47,6 +47,8 @@ func (h *FeedHandler) List(w http.ResponseWriter, r *http.Request) {
 			URL:             f.URL,
 			Enabled:         f.Enabled,
 			IntervalSeconds: f.IntervalSeconds,
+			BatchEnabled:    f.BatchEnabled,
+			BatchWindowSecs: f.BatchWindowSecs,
 			NextFetchAt:     f.NextFetchAt,
 			LastFetchAt:     f.LastFetchAt,
 			CreatedAt:       f.CreatedAt,
@@ -69,6 +71,8 @@ func (h *FeedHandler) Create(w http.ResponseWriter, r *http.Request) {
 		URL:             req.URL,
 		IntervalSeconds: req.IntervalSeconds,
 		Enabled:         req.Enabled,
+		BatchEnabled:    req.BatchEnabled,
+		BatchWindowSecs: req.BatchWindowSecs,
 	})
 	if err != nil {
 		writeError(w, 400, "INVALID_INPUT", "invalid feed fields", nil)
@@ -81,6 +85,45 @@ func (h *FeedHandler) Create(w http.ResponseWriter, r *http.Request) {
 		URL:             f.URL,
 		Enabled:         f.Enabled,
 		IntervalSeconds: f.IntervalSeconds,
+		BatchEnabled:    f.BatchEnabled,
+		BatchWindowSecs: f.BatchWindowSecs,
+		NextFetchAt:     f.NextFetchAt,
+		LastFetchAt:     f.LastFetchAt,
+		CreatedAt:       f.CreatedAt,
+		UpdatedAt:       f.UpdatedAt,
+	})
+}
+
+func (h *FeedHandler) Update(w http.ResponseWriter, r *http.Request) {
+	feedID := chi.URLParam(r, "feedID")
+	if feedID == "" {
+		writeError(w, 400, "INVALID_INPUT", "feedID is required", nil)
+		return
+	}
+
+	var req dto.UpdateFeedRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, 400, "INVALID_INPUT", "invalid request body", nil)
+		return
+	}
+
+	f, err := h.feedService.Update(r.Context(), feedID, service.UpdateFeedInput{
+		BatchEnabled:    req.BatchEnabled,
+		BatchWindowSecs: req.BatchWindowSecs,
+	})
+	if err != nil {
+		writeError(w, 400, "INVALID_INPUT", "invalid feed fields", nil)
+		return
+	}
+
+	writeJSON(w, 200, dto.FeedResponse{
+		ID:              f.ID,
+		Name:            f.Name,
+		URL:             f.URL,
+		Enabled:         f.Enabled,
+		IntervalSeconds: f.IntervalSeconds,
+		BatchEnabled:    f.BatchEnabled,
+		BatchWindowSecs: f.BatchWindowSecs,
 		NextFetchAt:     f.NextFetchAt,
 		LastFetchAt:     f.LastFetchAt,
 		CreatedAt:       f.CreatedAt,

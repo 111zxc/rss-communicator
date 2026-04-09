@@ -107,12 +107,28 @@ func (w *FetchWorker) process(ctx context.Context, feedID string) {
 
 	for _, it := range inserted {
 		for _, s := range subs {
-			created, deliveryID, err := w.db.Deliveries().CreatePendingIfNotExists(ctx, s.ContactID, it.ID)
+			availableAt := time.Now().UTC()
+			if f.BatchEnabled {
+				availableAt = nextBatchWindow(time.Now().UTC(), f.BatchWindowSecs)
+			}
+
+			created, deliveryID, err := w.db.Deliveries().CreatePendingIfNotExists(ctx, s.ContactID, it.ID, availableAt)
 			if err != nil || !created {
+				continue
+			}
+			if f.BatchEnabled {
 				continue
 			}
 			b, _ := json.Marshal(queue.DeliverJob{DeliveryID: deliveryID})
 			_ = w.q.Publish(ctx, queue.TopicDeliver, b)
 		}
 	}
+}
+
+func nextBatchWindow(now time.Time, windowSecs int) time.Time {
+	if windowSecs < 60 {
+		windowSecs = 3600
+	}
+	window := time.Duration(windowSecs) * time.Second
+	return now.UTC().Truncate(window).Add(window)
 }

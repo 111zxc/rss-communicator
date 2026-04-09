@@ -30,6 +30,7 @@ type FeedsRepository interface {
 	MarkFetched(ctx context.Context, feedID string, fetchedAt time.Time, nextAt time.Time, etag, lastModified *string) error
 	MarkFetchError(ctx context.Context, feedID string, errMsg string) error
 	GetByID(ctx context.Context, feedID string) (domain.Feed, error)
+	UpdateBatching(ctx context.Context, feedID string, batchEnabled bool, batchWindowSecs int) (domain.Feed, error)
 	List(ctx context.Context, limit, offset int) ([]domain.Feed, int, error)
 	Delete(ctx context.Context, feedID string) error
 }
@@ -52,7 +53,7 @@ type ItemsRepo interface {
 }
 
 type DeliveriesRepository interface {
-	CreatePendingIfNotExists(ctx context.Context, contactID, itemID string) (created bool, deliveryID string, err error)
+	CreatePendingIfNotExists(ctx context.Context, contactID, itemID string, availableAt time.Time) (created bool, deliveryID string, err error)
 	MarkSent(ctx context.Context, deliveryID string, sentAt time.Time) error
 	MarkFailed(ctx context.Context, deliveryID string, errMsg string, nextRetryAt *time.Time) error
 }

@@ -14,7 +14,7 @@ import (
 )
 
 type DeliverySender interface {
-	Send(ctx context.Context, c domain.Contact, item domain.Item) error
+	Send(ctx context.Context, c domain.Contact, feed domain.Feed, items []domain.Item) error
 }
 
 type DeliverWorkerConfig struct {
@@ -95,53 +95,57 @@ func (w *DeliverWorker) Subscribe(ctx context.Context) error {
 }
 
 func (w *DeliverWorker) process(ctx context.Context, deliveryID string) {
-	d, err := w.db.Deliveries().GetByID(ctx, deliveryID)
+	contact, feed, batch, err := w.db.Deliveries().ClaimBatch(ctx, deliveryID, time.Now().UTC())
 	if err != nil {
-		w.log.Error("delivery get failed", "err", err)
+		w.log.Error("delivery claim failed", "delivery_id", deliveryID, "err", err)
+		return
+	}
+	if len(batch) == 0 {
 		return
 	}
 
-	if d.Status == domain.DeliverySent {
+	if contact.Status != domain.ContactActive {
+		ids := deliveryIDs(batch)
+		_ = w.db.Deliveries().MarkManyFailed(ctx, ids, "contact is not active", nil)
 		return
 	}
 
-	if d.NextRetryAt != nil && d.NextRetryAt.After(time.Now().UTC()) {
-		return
-	}
-
-	c, err := w.db.Contacts().GetByID(ctx, d.ContactID)
-	if err != nil {
-		w.log.Error("contact get failed", "err", err)
-		return
-	}
-	if c.Status != domain.ContactActive {
-		return
-	}
-
-	it, err := w.db.Items().GetByID(ctx, d.ItemID)
-	if err != nil {
-		w.log.Error("item get failed", "err", err)
-		return
+	items := make([]domain.Item, 0, len(batch))
+	attemptCount := 0
+	for _, entry := range batch {
+		items = append(items, entry.Item)
+		if entry.Delivery.AttemptCount > attemptCount {
+			attemptCount = entry.Delivery.AttemptCount
+		}
 	}
 
 	if err := w.limiter.Wait(ctx); err != nil {
 		return
 	}
 
-	err = w.sender.Send(ctx, c, it)
+	err = w.sender.Send(ctx, contact, feed, items)
+	ids := deliveryIDs(batch)
 	if err == nil {
-		_ = w.db.Deliveries().MarkSent(ctx, deliveryID, time.Now().UTC())
+		_ = w.db.Deliveries().MarkManySent(ctx, ids, time.Now().UTC())
 		return
 	}
 
-	next := time.Now().UTC().Add(w.backoff.Delay(d.AttemptCount + 1))
-	if isPermanent(err) || d.AttemptCount >= w.maxAttempts {
-		_ = w.db.Deliveries().MarkFailed(ctx, deliveryID, err.Error(), nil)
+	next := time.Now().UTC().Add(w.backoff.Delay(attemptCount + 1))
+	if isPermanent(err) || attemptCount >= w.maxAttempts {
+		_ = w.db.Deliveries().MarkManyFailed(ctx, ids, err.Error(), nil)
 		w.log.Warn("delivery dead/failed", "delivery_id", deliveryID, "err", err)
 		return
 	}
 
-	_ = w.db.Deliveries().MarkFailed(ctx, deliveryID, err.Error(), &next)
+	_ = w.db.Deliveries().MarkManyFailed(ctx, ids, err.Error(), &next)
+}
+
+func deliveryIDs(batch []domain.DeliveryWithItem) []string {
+	out := make([]string, 0, len(batch))
+	for _, entry := range batch {
+		out = append(out, entry.Delivery.ID)
+	}
+	return out
 }
 
 func isPermanent(err error) bool {
