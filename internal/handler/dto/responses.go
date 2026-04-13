@@ -44,5 +44,28 @@ type HTTPContactResponse struct {
 type SubscriptionResponse struct {
 	FeedID    string    `json:"feed_id"`
 	ContactID string    `json:"contact_id"`
+	Source    string    `json:"source,omitempty"`
+	GroupID   *string   `json:"group_id,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+type GroupResponse struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description *string   `json:"description,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type RegistrationCodeResponse struct {
+	ID          string     `json:"id"`
+	Code        string     `json:"code"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description,omitempty"`
+	Enabled     bool       `json:"enabled"`
+	MaxUses     *int       `json:"max_uses,omitempty"`
+	UseCount    int        `json:"use_count"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }

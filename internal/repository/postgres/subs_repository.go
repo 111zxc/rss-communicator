@@ -15,7 +15,7 @@ func NewSubscriptionsRepository(db *sql.DB) *SubscriptionsRepository {
 
 func (r *SubscriptionsRepository) ListByFeed(ctx context.Context, feedID string) ([]domain.Subscription, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, feed_id, contact_id, enabled, created_at
+		SELECT id, feed_id, contact_id, source, source_group_id, enabled, created_at
 		FROM subscriptions
 		WHERE feed_id=$1 AND enabled=true
 	`, feedID)
@@ -27,8 +27,14 @@ func (r *SubscriptionsRepository) ListByFeed(ctx context.Context, feedID string)
 	var out []domain.Subscription
 	for rows.Next() {
 		var s domain.Subscription
-		if err := rows.Scan(&s.ID, &s.FeedID, &s.ContactID, &s.Enabled, &s.CreatedAt); err != nil {
+		var source string
+		var groupID sql.NullString
+		if err := rows.Scan(&s.ID, &s.FeedID, &s.ContactID, &source, &groupID, &s.Enabled, &s.CreatedAt); err != nil {
 			return nil, err
+		}
+		s.Source = domain.SubscriptionSource(source)
+		if groupID.Valid {
+			s.GroupID = &groupID.String
 		}
 		out = append(out, s)
 	}
@@ -37,7 +43,7 @@ func (r *SubscriptionsRepository) ListByFeed(ctx context.Context, feedID string)
 
 func (r *SubscriptionsRepository) ListByContact(ctx context.Context, contactID string) ([]domain.Subscription, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, feed_id, contact_id, enabled, created_at
+		SELECT id, feed_id, contact_id, source, source_group_id, enabled, created_at
 		FROM subscriptions
 		WHERE contact_id=$1 AND enabled=true
 		ORDER BY created_at DESC
@@ -50,8 +56,14 @@ func (r *SubscriptionsRepository) ListByContact(ctx context.Context, contactID s
 	var out []domain.Subscription
 	for rows.Next() {
 		var s domain.Subscription
-		if err := rows.Scan(&s.ID, &s.FeedID, &s.ContactID, &s.Enabled, &s.CreatedAt); err != nil {
+		var source string
+		var groupID sql.NullString
+		if err := rows.Scan(&s.ID, &s.FeedID, &s.ContactID, &source, &groupID, &s.Enabled, &s.CreatedAt); err != nil {
 			return nil, err
+		}
+		s.Source = domain.SubscriptionSource(source)
+		if groupID.Valid {
+			s.GroupID = &groupID.String
 		}
 		out = append(out, s)
 	}
@@ -60,9 +72,9 @@ func (r *SubscriptionsRepository) ListByContact(ctx context.Context, contactID s
 
 func (r *SubscriptionsRepository) Add(ctx context.Context, feedID, contactID string) error {
 	const q = `
-INSERT INTO subscriptions (feed_id, contact_id, created_at)
-VALUES ($1, $2, now())
-ON CONFLICT (feed_id, contact_id) DO NOTHING
+INSERT INTO subscriptions (feed_id, contact_id, source, source_group_id, created_at)
+VALUES ($1, $2, 'direct', NULL, now())
+ON CONFLICT DO NOTHING
 `
 	_, err := r.db.ExecContext(ctx, q, feedID, contactID)
 	return err
@@ -71,8 +83,34 @@ ON CONFLICT (feed_id, contact_id) DO NOTHING
 func (r *SubscriptionsRepository) Remove(ctx context.Context, feedID, contactID string) error {
 	const q = `
 DELETE FROM subscriptions
-WHERE feed_id = $1 AND contact_id = $2
+WHERE feed_id = $1 AND contact_id = $2 AND source = 'direct'
 `
 	_, err := r.db.ExecContext(ctx, q, feedID, contactID)
+	return err
+}
+
+func (r *SubscriptionsRepository) AddGroup(ctx context.Context, feedID, contactID, groupID string) error {
+	const q = `
+INSERT INTO subscriptions (feed_id, contact_id, source, source_group_id, created_at)
+VALUES ($1, $2, 'group', $3, now())
+ON CONFLICT DO NOTHING
+`
+	_, err := r.db.ExecContext(ctx, q, feedID, contactID, groupID)
+	return err
+}
+
+func (r *SubscriptionsRepository) RemoveGroupByFeed(ctx context.Context, groupID, feedID string) error {
+	_, err := r.db.ExecContext(ctx, `
+DELETE FROM subscriptions
+WHERE source = 'group' AND source_group_id = $1 AND feed_id = $2
+`, groupID, feedID)
+	return err
+}
+
+func (r *SubscriptionsRepository) RemoveGroupByContact(ctx context.Context, groupID, contactID string) error {
+	_, err := r.db.ExecContext(ctx, `
+DELETE FROM subscriptions
+WHERE source = 'group' AND source_group_id = $1 AND contact_id = $2
+`, groupID, contactID)
 	return err
 }

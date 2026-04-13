@@ -9,6 +9,7 @@ import (
 
 	"github.com/111zxc/rss-communicator/internal/config"
 	"github.com/111zxc/rss-communicator/internal/repository/postgres"
+	"github.com/111zxc/rss-communicator/internal/service"
 	"github.com/111zxc/rss-communicator/internal/telegram"
 )
 
@@ -39,7 +40,8 @@ func RunTGBot(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	}
 	api.Debug = false
 
-	b := telegram.New(api, db, log)
+	regSvc := service.NewRegistrationService(db.Contacts(), db.RegistrationCodes(), db.Groups(), db.Subscriptions())
+	b := telegram.New(api, db, regSvc, log)
 
 	log.Info("tg-bot started")
 	if err := b.Run(ctx); err != nil && err != context.Canceled {

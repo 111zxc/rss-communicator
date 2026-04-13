@@ -6,8 +6,12 @@ const (
 	cbConfirm = "confirm"
 )
 
-func confirmKeyboard() tgbotapi.InlineKeyboardMarkup {
-	btn := tgbotapi.NewInlineKeyboardButtonData("✅ Подтвердить подписку", cbConfirm)
+func confirmKeyboard(code string) tgbotapi.InlineKeyboardMarkup {
+	data := cbConfirm
+	if code != "" {
+		data = cbConfirm + "|" + code
+	}
+	btn := tgbotapi.NewInlineKeyboardButtonData("✅ Подтвердить подписку", data)
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(btn),
 	)

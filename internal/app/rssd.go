@@ -125,9 +125,11 @@ func RunRSSD(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	contactSvc := service.NewContactService(db.Contacts())
 	contactDeliverySvc := service.NewContactDeliveryService(db.Contacts(), sender)
 	subSvc := service.NewSubscriptionService(db.Subscriptions(), db.Feeds(), db.Contacts())
+	groupSvc := service.NewGroupService(db.Groups(), db.Feeds(), db.Contacts(), db.Subscriptions())
+	regCodeSvc := service.NewRegistrationCodeService(db.RegistrationCodes(), db.Groups())
 
 	// --- handlers ---
-	h := handler.New(feedSvc, contactSvc, contactDeliverySvc, subSvc)
+	h := handler.New(feedSvc, contactSvc, contactDeliverySvc, subSvc, groupSvc, regCodeSvc)
 
 	// --- router ---
 	router := NewRouter(h)

@@ -117,6 +117,18 @@ func (s *subsRepoStub) Remove(context.Context, string, string) error {
 	return nil
 }
 
+func (s *subsRepoStub) AddGroup(context.Context, string, string, string) error {
+	return nil
+}
+
+func (s *subsRepoStub) RemoveGroupByFeed(context.Context, string, string) error {
+	return nil
+}
+
+func (s *subsRepoStub) RemoveGroupByContact(context.Context, string, string) error {
+	return nil
+}
+
 type feedLookupStub struct {
 	feed domain.Feed
 	err  error

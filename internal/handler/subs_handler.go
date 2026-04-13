@@ -42,6 +42,8 @@ func (h *SubscriptionHandler) ListByFeed(w http.ResponseWriter, r *http.Request)
 		out = append(out, dto.SubscriptionResponse{
 			FeedID:    sub.FeedID,
 			ContactID: sub.ContactID,
+			Source:    string(sub.Source),
+			GroupID:   sub.GroupID,
 			CreatedAt: sub.CreatedAt,
 		})
 	}
@@ -73,6 +75,8 @@ func (h *SubscriptionHandler) ListByContact(w http.ResponseWriter, r *http.Reque
 		out = append(out, dto.SubscriptionResponse{
 			FeedID:    sub.FeedID,
 			ContactID: sub.ContactID,
+			Source:    string(sub.Source),
+			GroupID:   sub.GroupID,
 			CreatedAt: sub.CreatedAt,
 		})
 	}

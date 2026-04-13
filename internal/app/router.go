@@ -46,6 +46,31 @@ func NewRouter(h *handler.Handler) http.Handler {
 			r.Post("/{contactID}/test-send", h.Contact.TestSend)
 			r.Delete("/{contactID}", h.Contact.Delete)
 		})
+
+		r.Route("/groups", func(r chi.Router) {
+			r.Get("/", h.Group.List)
+			r.Post("/", h.Group.Create)
+			r.Get("/{groupID}", h.Group.Get)
+			r.Put("/{groupID}", h.Group.Update)
+			r.Delete("/{groupID}", h.Group.Delete)
+			r.Get("/{groupID}/contacts", h.Group.ListContacts)
+			r.Post("/{groupID}/contacts", h.Group.AddContact)
+			r.Delete("/{groupID}/contacts/{contactID}", h.Group.RemoveContact)
+			r.Get("/{groupID}/feeds", h.Group.ListFeeds)
+			r.Post("/{groupID}/feeds", h.Group.AddFeed)
+			r.Delete("/{groupID}/feeds/{feedID}", h.Group.RemoveFeed)
+		})
+
+		r.Route("/registration-codes", func(r chi.Router) {
+			r.Get("/", h.RegCode.List)
+			r.Post("/", h.RegCode.Create)
+			r.Get("/{codeID}", h.RegCode.Get)
+			r.Put("/{codeID}", h.RegCode.Update)
+			r.Delete("/{codeID}", h.RegCode.Delete)
+			r.Get("/{codeID}/groups", h.RegCode.ListGroups)
+			r.Post("/{codeID}/groups", h.RegCode.AddGroup)
+			r.Delete("/{codeID}/groups/{groupID}", h.RegCode.RemoveGroup)
+		})
 	})
 
 	return r

@@ -65,8 +65,38 @@ type Subscription struct {
 	ID        string
 	FeedID    string
 	ContactID string
+	Source    SubscriptionSource
+	GroupID   *string
 	Enabled   bool
 	CreatedAt time.Time
+}
+
+type SubscriptionSource string
+
+const (
+	SubscriptionDirect SubscriptionSource = "direct"
+	SubscriptionGroup  SubscriptionSource = "group"
+)
+
+type Group struct {
+	ID          string
+	Name        string
+	Description *string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type RegistrationCode struct {
+	ID          string
+	Code        string
+	Name        string
+	Description *string
+	Enabled     bool
+	MaxUses     *int
+	UseCount    int
+	ExpiresAt   *time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 type Item struct {

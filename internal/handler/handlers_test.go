@@ -356,6 +356,34 @@ func TestContactHandlerTestSend(t *testing.T) {
 	}
 }
 
+func TestGroupHandlerCreate(t *testing.T) {
+	groupSvc := service.NewGroupService(&handlerGroupsRepoStub{group: domain.Group{ID: "group-1", Name: "test"}}, &handlerFeedRepoStub{}, &handlerContactsRepoStub{}, &handlerSubsRepoStub{})
+	h := NewGroupHandler(groupSvc)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/groups", bytes.NewReader([]byte(`{"name":"test"}`)))
+	rec := httptest.NewRecorder()
+
+	h.Create(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRegistrationCodeHandlerCreate(t *testing.T) {
+	codeSvc := service.NewRegistrationCodeService(&handlerRegistrationCodesRepoStub{}, &handlerGroupsRepoStub{group: domain.Group{ID: "group-1", Name: "g"}})
+	h := NewRegistrationCodeHandler(codeSvc)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/registration-codes", bytes.NewReader([]byte(`{"code":"ABC123","name":"Promo","enabled":true}`)))
+	rec := httptest.NewRecorder()
+
+	h.Create(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 type dtoFeedResponse struct {
 	BatchEnabled    bool `json:"batch_enabled"`
 	BatchWindowSecs int  `json:"batch_window_seconds"`
@@ -526,11 +554,88 @@ func (r *handlerSubsRepoStub) Remove(context.Context, string, string) error {
 	return nil
 }
 
+func (r *handlerSubsRepoStub) AddGroup(context.Context, string, string, string) error {
+	return nil
+}
+
+func (r *handlerSubsRepoStub) RemoveGroupByFeed(context.Context, string, string) error {
+	return nil
+}
+
+func (r *handlerSubsRepoStub) RemoveGroupByContact(context.Context, string, string) error {
+	return nil
+}
+
 type handlerContactSenderStub struct{}
 
 func (handlerContactSenderStub) Send(context.Context, domain.Contact, domain.Feed, []domain.Item) error {
 	return nil
 }
+
+type handlerGroupsRepoStub struct {
+	group domain.Group
+}
+
+func (r *handlerGroupsRepoStub) Create(context.Context, domain.Group) (domain.Group, error) {
+	return r.group, nil
+}
+func (r *handlerGroupsRepoStub) Update(context.Context, string, string, *string) (domain.Group, error) {
+	return r.group, nil
+}
+func (r *handlerGroupsRepoStub) GetByID(context.Context, string) (domain.Group, error) {
+	return r.group, nil
+}
+func (r *handlerGroupsRepoStub) List(context.Context, int, int) ([]domain.Group, int, error) {
+	return []domain.Group{r.group}, 1, nil
+}
+func (r *handlerGroupsRepoStub) Delete(context.Context, string) error { return nil }
+func (r *handlerGroupsRepoStub) ListContacts(context.Context, string) ([]domain.Contact, error) {
+	return nil, nil
+}
+func (r *handlerGroupsRepoStub) AddContact(context.Context, string, string) error { return nil }
+func (r *handlerGroupsRepoStub) RemoveContact(context.Context, string, string) error {
+	return nil
+}
+func (r *handlerGroupsRepoStub) ListFeeds(context.Context, string) ([]domain.Feed, error) {
+	return nil, nil
+}
+func (r *handlerGroupsRepoStub) AddFeed(context.Context, string, string) error    { return nil }
+func (r *handlerGroupsRepoStub) RemoveFeed(context.Context, string, string) error { return nil }
+func (r *handlerGroupsRepoStub) ListFeedIDs(context.Context, string) ([]string, error) {
+	return nil, nil
+}
+func (r *handlerGroupsRepoStub) ListContactIDs(context.Context, string) ([]string, error) {
+	return nil, nil
+}
+
+type handlerRegistrationCodesRepoStub struct{}
+
+func (r *handlerRegistrationCodesRepoStub) Create(context.Context, domain.RegistrationCode) (domain.RegistrationCode, error) {
+	return domain.RegistrationCode{ID: "code-1", Code: "ABC123", Name: "Promo", Enabled: true}, nil
+}
+func (r *handlerRegistrationCodesRepoStub) Update(context.Context, string, string, string, *string, bool, *int, *time.Time) (domain.RegistrationCode, error) {
+	return domain.RegistrationCode{}, nil
+}
+func (r *handlerRegistrationCodesRepoStub) GetByID(context.Context, string) (domain.RegistrationCode, error) {
+	return domain.RegistrationCode{ID: "code-1", Code: "ABC123", Name: "Promo", Enabled: true}, nil
+}
+func (r *handlerRegistrationCodesRepoStub) GetByCode(context.Context, string) (domain.RegistrationCode, error) {
+	return domain.RegistrationCode{ID: "code-1", Code: "ABC123", Name: "Promo", Enabled: true}, nil
+}
+func (r *handlerRegistrationCodesRepoStub) List(context.Context, int, int) ([]domain.RegistrationCode, int, error) {
+	return nil, 0, nil
+}
+func (r *handlerRegistrationCodesRepoStub) Delete(context.Context, string) error { return nil }
+func (r *handlerRegistrationCodesRepoStub) ListGroups(context.Context, string) ([]domain.Group, error) {
+	return nil, nil
+}
+func (r *handlerRegistrationCodesRepoStub) AddGroup(context.Context, string, string) error {
+	return nil
+}
+func (r *handlerRegistrationCodesRepoStub) RemoveGroup(context.Context, string, string) error {
+	return nil
+}
+func (r *handlerRegistrationCodesRepoStub) IncrementUse(context.Context, string) error { return nil }
 
 func withURLParam(r *http.Request, key, value string) *http.Request {
 	routeCtx := chi.RouteContext(r.Context())

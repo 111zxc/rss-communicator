@@ -1,5 +1,7 @@
 package dto
 
+import "time"
+
 type CreateFeedRequest struct {
 	Name            string `json:"name"`
 	URL             string `json:"url"`
@@ -57,4 +59,30 @@ type ContactTestSendRequest struct {
 	Link     string  `json:"link"`
 	Summary  *string `json:"summary"`
 	Author   *string `json:"author"`
+}
+
+type GroupRequest struct {
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+}
+
+type GroupContactRequest struct {
+	ContactID string `json:"contact_id"`
+}
+
+type GroupFeedRequest struct {
+	FeedID string `json:"feed_id"`
+}
+
+type RegistrationCodeRequest struct {
+	Code        string     `json:"code"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description"`
+	Enabled     bool       `json:"enabled"`
+	MaxUses     *int       `json:"max_uses"`
+	ExpiresAt   *time.Time `json:"expires_at"`
+}
+
+type RegistrationCodeGroupRequest struct {
+	GroupID string `json:"group_id"`
 }
