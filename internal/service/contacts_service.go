@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"strings"
 	"time"
@@ -50,6 +51,20 @@ type UpdateTelegramContactInput struct {
 	Status      string
 }
 
+type CreateEmailContactInput struct {
+	Email       string
+	DisplayName *string
+	Status      string
+	Format      string
+}
+
+type UpdateEmailContactInput struct {
+	Email       string
+	DisplayName *string
+	Status      string
+	Format      string
+}
+
 func (s *ContactService) CreateTelegram(ctx context.Context, in CreateTelegramContactInput) (domain.Contact, error) {
 	chatID := strings.TrimSpace(in.ChatID)
 	if chatID == "" {
@@ -64,6 +79,24 @@ func (s *ContactService) CreateTelegram(ctx context.Context, in CreateTelegramCo
 	username := normalizeOptional(in.Username)
 	displayName := normalizeOptional(in.DisplayName)
 	contact, err := s.contacts.CreateTelegram(ctx, chatID, username, displayName, status, verifiedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Contact{}, ErrNotFound
+	}
+	return contact, err
+}
+
+func (s *ContactService) CreateEmail(ctx context.Context, in CreateEmailContactInput) (domain.Contact, error) {
+	emailValue, cfg, displayName, err := normalizeEmailContactInput(in.Email, in.DisplayName, in.Format)
+	if err != nil {
+		return domain.Contact{}, err
+	}
+
+	status, verifiedAt, err := normalizeContactStatus(in.Status)
+	if err != nil {
+		return domain.Contact{}, err
+	}
+
+	contact, err := s.contacts.CreateEmail(ctx, emailValue, displayName, status, cfg, verifiedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Contact{}, ErrNotFound
 	}
@@ -87,6 +120,28 @@ func (s *ContactService) UpdateTelegram(ctx context.Context, contactID string, i
 	username := normalizeOptional(in.Username)
 	displayName := normalizeOptional(in.DisplayName)
 	contact, err := s.contacts.UpdateTelegram(ctx, contactID, chatID, username, displayName, status, verifiedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Contact{}, ErrNotFound
+	}
+	return contact, err
+}
+
+func (s *ContactService) UpdateEmail(ctx context.Context, contactID string, in UpdateEmailContactInput) (domain.Contact, error) {
+	if strings.TrimSpace(contactID) == "" {
+		return domain.Contact{}, ErrBadRequest
+	}
+
+	emailValue, cfg, displayName, err := normalizeEmailContactInput(in.Email, in.DisplayName, in.Format)
+	if err != nil {
+		return domain.Contact{}, err
+	}
+
+	status, verifiedAt, err := normalizeContactStatus(in.Status)
+	if err != nil {
+		return domain.Contact{}, err
+	}
+
+	contact, err := s.contacts.UpdateEmail(ctx, contactID, emailValue, displayName, status, cfg, verifiedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Contact{}, ErrNotFound
 	}
@@ -167,6 +222,30 @@ func (s *ContactService) Delete(ctx context.Context, contactID string) error {
 		return ErrNotFound
 	}
 	return err
+}
+
+func normalizeEmailContactInput(emailValue string, displayName *string, format string) (string, domain.EmailContactConfig, *string, error) {
+	normalizedEmail := strings.ToLower(strings.TrimSpace(emailValue))
+	if normalizedEmail == "" {
+		return "", domain.EmailContactConfig{}, nil, ErrBadRequest
+	}
+
+	parsed, err := mail.ParseAddress(normalizedEmail)
+	if err != nil || !strings.EqualFold(parsed.Address, normalizedEmail) {
+		return "", domain.EmailContactConfig{}, nil, ErrBadRequest
+	}
+
+	normalizedFormat := strings.ToLower(strings.TrimSpace(format))
+	if normalizedFormat == "" {
+		normalizedFormat = "plain"
+	}
+	switch normalizedFormat {
+	case "plain", "html":
+	default:
+		return "", domain.EmailContactConfig{}, nil, ErrBadRequest
+	}
+
+	return normalizedEmail, domain.EmailContactConfig{Format: normalizedFormat}, normalizeOptional(displayName), nil
 }
 
 func normalizeHTTPContactInput(in CreateHTTPContactInput) (domain.HTTPContactConfig, *string, error) {

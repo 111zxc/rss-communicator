@@ -167,6 +167,32 @@ func TestContactHandlerCreateTelegram(t *testing.T) {
 	}
 }
 
+func TestContactHandlerCreateEmail(t *testing.T) {
+	repo := &handlerContactsRepoStub{
+		createdEmail: domain.Contact{
+			ID:     "contact-email-1",
+			Type:   domain.ContactEmail,
+			Status: domain.ContactActive,
+			Value:  "alice@example.com",
+			Email:  &domain.EmailContactConfig{Format: "html"},
+		},
+	}
+	h := NewContactHandler(service.NewContactService(repo), nil)
+
+	body := []byte(`{"email":"Alice@Example.com","display_name":"Alice","status":"active","format":"html"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/contacts/email", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	h.CreateEmail(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.createEmailValue != "alice@example.com" {
+		t.Fatalf("unexpected email value: %s", repo.createEmailValue)
+	}
+}
+
 func TestContactHandlerUpdateHTTP(t *testing.T) {
 	repo := &handlerContactsRepoStub{
 		updatedHTTP: domain.Contact{
@@ -440,6 +466,8 @@ func (r *handlerFeedRepoStub) Delete(context.Context, string) error {
 type handlerContactsRepoStub struct {
 	contacts                []domain.Contact
 	contactByID             domain.Contact
+	createdEmail            domain.Contact
+	updatedEmail            domain.Contact
 	createdHTTP             domain.Contact
 	updatedHTTP             domain.Contact
 	createdTelegram         domain.Contact
@@ -448,11 +476,20 @@ type handlerContactsRepoStub struct {
 	createHTTPValue         string
 	createHTTPName          *string
 	createHTTPStatus        domain.ContactStatus
+	createEmailValue        string
+	createEmailName         *string
+	createEmailCfg          domain.EmailContactConfig
+	createEmailStatus       domain.ContactStatus
 	updateHTTPInput         domain.HTTPContactConfig
 	updateHTTPValue         string
 	updateHTTPName          *string
 	updateHTTPStatus        domain.ContactStatus
 	updateHTTPContactID     string
+	updateEmailValue        string
+	updateEmailName         *string
+	updateEmailCfg          domain.EmailContactConfig
+	updateEmailStatus       domain.ContactStatus
+	updateEmailContactID    string
 	createTelegramChatID    string
 	createTelegramUser      *string
 	createTelegramName      *string
@@ -484,6 +521,27 @@ func (r *handlerContactsRepoStub) UpdateTelegram(_ context.Context, contactID st
 	r.updateTelegramName = displayName
 	r.updateTelegramStatus = status
 	return r.updatedTelegram, nil
+}
+
+func (r *handlerContactsRepoStub) CreateEmail(_ context.Context, value string, displayName *string, status domain.ContactStatus, cfg domain.EmailContactConfig, _ *time.Time) (domain.Contact, error) {
+	r.createEmailValue = value
+	r.createEmailName = displayName
+	r.createEmailCfg = cfg
+	r.createEmailStatus = status
+	return r.createdEmail, nil
+}
+
+func (r *handlerContactsRepoStub) UpdateEmail(_ context.Context, contactID string, value string, displayName *string, status domain.ContactStatus, cfg domain.EmailContactConfig, _ *time.Time) (domain.Contact, error) {
+	r.updateEmailContactID = contactID
+	r.updateEmailValue = value
+	r.updateEmailName = displayName
+	r.updateEmailCfg = cfg
+	r.updateEmailStatus = status
+	return r.updatedEmail, nil
+}
+
+func (r *handlerContactsRepoStub) GetEmailConfig(context.Context, string) (domain.EmailContactConfig, error) {
+	return domain.EmailContactConfig{}, nil
 }
 
 func (r *handlerContactsRepoStub) CreateHTTP(_ context.Context, value string, displayName *string, status domain.ContactStatus, cfg domain.HTTPContactConfig, _ *time.Time) (domain.Contact, error) {

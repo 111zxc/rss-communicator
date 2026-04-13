@@ -186,6 +186,18 @@ func (c *contactsRepoStub) UpdateTelegram(context.Context, string, string, *stri
 	return domain.Contact{}, nil
 }
 
+func (c *contactsRepoStub) CreateEmail(context.Context, string, *string, domain.ContactStatus, domain.EmailContactConfig, *time.Time) (domain.Contact, error) {
+	return domain.Contact{}, nil
+}
+
+func (c *contactsRepoStub) UpdateEmail(context.Context, string, string, *string, domain.ContactStatus, domain.EmailContactConfig, *time.Time) (domain.Contact, error) {
+	return domain.Contact{}, nil
+}
+
+func (c *contactsRepoStub) GetEmailConfig(context.Context, string) (domain.EmailContactConfig, error) {
+	return domain.EmailContactConfig{}, nil
+}
+
 func (c *contactsRepoStub) CreateHTTP(context.Context, string, *string, domain.ContactStatus, domain.HTTPContactConfig, *time.Time) (domain.Contact, error) {
 	return domain.Contact{}, nil
 }

@@ -150,6 +150,29 @@ func (r *ContactsRepository) UpdateTelegram(
 	return contact, nil
 }
 
+func (r *ContactsRepository) CreateEmail(
+	ctx context.Context,
+	value string,
+	displayName *string,
+	status domain.ContactStatus,
+	cfg domain.EmailContactConfig,
+	verifiedAt *time.Time,
+) (domain.Contact, error) {
+	return r.createOrUpdateEmail(ctx, "", value, displayName, status, cfg, verifiedAt)
+}
+
+func (r *ContactsRepository) UpdateEmail(
+	ctx context.Context,
+	contactID string,
+	value string,
+	displayName *string,
+	status domain.ContactStatus,
+	cfg domain.EmailContactConfig,
+	verifiedAt *time.Time,
+) (domain.Contact, error) {
+	return r.createOrUpdateEmail(ctx, contactID, value, displayName, status, cfg, verifiedAt)
+}
+
 func (r *ContactsRepository) CreateHTTP(
 	ctx context.Context,
 	value string,
@@ -171,6 +194,43 @@ func (r *ContactsRepository) UpdateHTTP(
 	verifiedAt *time.Time,
 ) (domain.Contact, error) {
 	return r.createOrUpdateHTTP(ctx, contactID, value, displayName, status, cfg, verifiedAt)
+}
+
+func (r *ContactsRepository) createOrUpdateEmail(
+	ctx context.Context,
+	contactID string,
+	value string,
+	displayName *string,
+	status domain.ContactStatus,
+	cfg domain.EmailContactConfig,
+	verifiedAt *time.Time,
+) (domain.Contact, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Contact{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	contact, err := upsertEmailContact(ctx, tx, contactID, value, displayName, status, verifiedAt)
+	if err != nil {
+		return domain.Contact{}, err
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO contact_email_config (contact_id, format)
+		VALUES ($1, $2)
+		ON CONFLICT (contact_id) DO UPDATE SET format = EXCLUDED.format
+	`, contact.ID, cfg.Format)
+	if err != nil {
+		return domain.Contact{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return domain.Contact{}, err
+	}
+
+	contact.Email = &domain.EmailContactConfig{Format: cfg.Format}
+	return contact, nil
 }
 
 func (r *ContactsRepository) createOrUpdateHTTP(
@@ -224,6 +284,25 @@ func (r *ContactsRepository) createOrUpdateHTTP(
 	return contact, nil
 }
 
+func (r *ContactsRepository) GetEmailConfig(ctx context.Context, contactID string) (domain.EmailContactConfig, error) {
+	row := r.db.QueryRowContext(ctx, `
+		SELECT format
+		FROM contact_email_config
+		WHERE contact_id = $1
+	`, contactID)
+
+	var cfg domain.EmailContactConfig
+	var format sql.NullString
+	if err := row.Scan(&format); err != nil {
+		return domain.EmailContactConfig{}, err
+	}
+	cfg.Format = "plain"
+	if format.Valid && format.String != "" {
+		cfg.Format = format.String
+	}
+	return cfg, nil
+}
+
 func (r *ContactsRepository) GetHTTPConfig(ctx context.Context, contactID string) (domain.HTTPContactConfig, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT method, url, headers_json, body_template
@@ -254,9 +333,10 @@ func (r *ContactsRepository) GetHTTPConfig(ctx context.Context, contactID string
 func (r *ContactsRepository) GetByID(ctx context.Context, id string) (domain.Contact, error) {
 	cs, _, err := r.listByQuery(ctx, `
 		SELECT c.id, c.type, c.status, c.value, c.display_name, c.verified_at, c.created_at, c.updated_at,
-		       tt.username, hh.method, hh.url, hh.headers_json, hh.body_template
+		       tt.username, ee.format, hh.method, hh.url, hh.headers_json, hh.body_template
 		FROM contacts c
 		LEFT JOIN contact_telegram_config tt ON tt.contact_id = c.id
+		LEFT JOIN contact_email_config ee ON ee.contact_id = c.id
 		LEFT JOIN contact_http_config hh ON hh.contact_id = c.id
 		WHERE c.id = $1
 	`, id)
@@ -272,9 +352,10 @@ func (r *ContactsRepository) GetByID(ctx context.Context, id string) (domain.Con
 func (r *ContactsRepository) List(ctx context.Context, limit, offset int) ([]domain.Contact, int, error) {
 	const q = `
 SELECT c.id, c.type, c.status, c.value, c.display_name, c.verified_at, c.created_at, c.updated_at,
-       tt.username, hh.method, hh.url, hh.headers_json, hh.body_template
+       tt.username, ee.format, hh.method, hh.url, hh.headers_json, hh.body_template
 FROM contacts c
 LEFT JOIN contact_telegram_config tt ON tt.contact_id = c.id
+LEFT JOIN contact_email_config ee ON ee.contact_id = c.id
 LEFT JOIN contact_http_config hh ON hh.contact_id = c.id
 ORDER BY c.created_at DESC
 LIMIT $1 OFFSET $2
@@ -295,9 +376,10 @@ LIMIT $1 OFFSET $2
 func (r *ContactsRepository) GetByTypeValue(ctx context.Context, typ domain.ContactType, value string) (domain.Contact, error) {
 	cs, _, err := r.listByQuery(ctx, `
 		SELECT c.id, c.type, c.status, c.value, c.display_name, c.verified_at, c.created_at, c.updated_at,
-		       tt.username, hh.method, hh.url, hh.headers_json, hh.body_template
+		       tt.username, ee.format, hh.method, hh.url, hh.headers_json, hh.body_template
 		FROM contacts c
 		LEFT JOIN contact_telegram_config tt ON tt.contact_id = c.id
+		LEFT JOIN contact_email_config ee ON ee.contact_id = c.id
 		LEFT JOIN contact_http_config hh ON hh.contact_id = c.id
 		WHERE c.type = $1 AND c.value = $2
 	`, string(typ), value)
@@ -351,7 +433,7 @@ func scanContact(scanner interface {
 }) (domain.Contact, error) {
 	var c domain.Contact
 	var typ, stat string
-	var disp, username, method, targetURL, body sql.NullString
+	var disp, username, emailFormat, method, targetURL, body sql.NullString
 	var verif sql.NullTime
 	var headersJSON []byte
 
@@ -365,6 +447,7 @@ func scanContact(scanner interface {
 		&c.CreatedAt,
 		&c.UpdatedAt,
 		&username,
+		&emailFormat,
 		&method,
 		&targetURL,
 		&headersJSON,
@@ -384,6 +467,13 @@ func scanContact(scanner interface {
 	}
 	if username.Valid {
 		c.Telegram = &domain.TelegramContactConfig{Username: &username.String}
+	}
+	if emailFormat.Valid || c.Type == domain.ContactEmail {
+		format := "plain"
+		if emailFormat.Valid && emailFormat.String != "" {
+			format = emailFormat.String
+		}
+		c.Email = &domain.EmailContactConfig{Format: format}
 	}
 	if method.Valid && targetURL.Valid {
 		c.HTTP = &domain.HTTPContactConfig{
@@ -484,6 +574,33 @@ func upsertHTTPContact(
 			WHERE id = $1 AND type = $6
 			RETURNING id, type, status, value, display_name, verified_at, created_at, updated_at
 		`, contactID, value, displayName, string(status), verifiedAt, string(domain.ContactHTTP))
+	}
+	return scanBaseContact(row)
+}
+
+func upsertEmailContact(
+	ctx context.Context,
+	tx *sql.Tx,
+	contactID string,
+	value string,
+	displayName *string,
+	status domain.ContactStatus,
+	verifiedAt *time.Time,
+) (domain.Contact, error) {
+	var row *sql.Row
+	if contactID == "" {
+		row = tx.QueryRowContext(ctx, `
+			INSERT INTO contacts (type, status, value, display_name, verified_at)
+			VALUES ($1, $2, $3, $4, $5)
+			RETURNING id, type, status, value, display_name, verified_at, created_at, updated_at
+		`, string(domain.ContactEmail), string(status), value, displayName, verifiedAt)
+	} else {
+		row = tx.QueryRowContext(ctx, `
+			UPDATE contacts
+			SET value = $2, display_name = $3, status = $4, verified_at = $5, updated_at = now()
+			WHERE id = $1 AND type = $6
+			RETURNING id, type, status, value, display_name, verified_at, created_at, updated_at
+		`, contactID, value, displayName, string(status), verifiedAt, string(domain.ContactEmail))
 	}
 	return scanBaseContact(row)
 }

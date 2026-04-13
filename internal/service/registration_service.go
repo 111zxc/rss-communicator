@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -47,6 +48,13 @@ type RegisterTelegramInput struct {
 	Code        string
 }
 
+type RegisterEmailInput struct {
+	Email       string
+	DisplayName *string
+	Code        string
+	Format      string
+}
+
 type RegisterResult struct {
 	Contact       domain.Contact
 	AppliedCode   *domain.RegistrationCode
@@ -59,26 +67,79 @@ func (s *RegistrationService) RegisterTelegram(ctx context.Context, in RegisterT
 		return RegisterResult{}, ErrBadRequest
 	}
 
-	if existing, err := s.contacts.GetByTypeValue(ctx, domain.ContactTelegram, chatID); err == nil {
-		if existing.Status == domain.ContactActive {
-			return RegisterResult{}, ErrAlreadyRegistered
-		}
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		return RegisterResult{}, err
-	}
-
 	username := normalizeOptional(in.Username)
 	displayName := normalizeOptional(in.DisplayName)
 	now := time.Now().UTC()
 
-	contact, err := s.contacts.CreateTelegram(ctx, chatID, username, displayName, domain.ContactActive, &now)
+	contact, err := s.createContactIfNeeded(
+		ctx,
+		domain.ContactTelegram,
+		chatID,
+		func() (domain.Contact, error) {
+			return s.contacts.CreateTelegram(ctx, chatID, username, displayName, domain.ContactActive, &now)
+		},
+	)
 	if err != nil {
 		return RegisterResult{}, err
 	}
 
+	return s.applyRegistrationCode(ctx, contact, in.Code, now)
+}
+
+func (s *RegistrationService) RegisterEmail(ctx context.Context, in RegisterEmailInput) (RegisterResult, error) {
+	emailValue := strings.ToLower(strings.TrimSpace(in.Email))
+	if emailValue == "" {
+		return RegisterResult{}, ErrBadRequest
+	}
+
+	parsed, err := mail.ParseAddress(emailValue)
+	if err != nil || !strings.EqualFold(parsed.Address, emailValue) {
+		return RegisterResult{}, ErrBadRequest
+	}
+
+	displayName := normalizeOptional(in.DisplayName)
+	format := strings.ToLower(strings.TrimSpace(in.Format))
+	if format == "" {
+		format = "plain"
+	}
+	now := time.Now().UTC()
+
+	contact, err := s.createContactIfNeeded(
+		ctx,
+		domain.ContactEmail,
+		emailValue,
+		func() (domain.Contact, error) {
+			return s.contacts.CreateEmail(ctx, emailValue, displayName, domain.ContactActive, domain.EmailContactConfig{Format: format}, &now)
+		},
+	)
+	if err != nil {
+		return RegisterResult{}, err
+	}
+
+	return s.applyRegistrationCode(ctx, contact, in.Code, now)
+}
+
+func (s *RegistrationService) createContactIfNeeded(
+	ctx context.Context,
+	contactType domain.ContactType,
+	value string,
+	create func() (domain.Contact, error),
+) (domain.Contact, error) {
+	if existing, err := s.contacts.GetByTypeValue(ctx, contactType, value); err == nil {
+		if existing.Status == domain.ContactActive {
+			return domain.Contact{}, ErrAlreadyRegistered
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return domain.Contact{}, err
+	}
+
+	return create()
+}
+
+func (s *RegistrationService) applyRegistrationCode(ctx context.Context, contact domain.Contact, codeInput string, now time.Time) (RegisterResult, error) {
 	result := RegisterResult{Contact: contact}
 
-	codeValue := strings.ToUpper(strings.TrimSpace(in.Code))
+	codeValue := strings.ToUpper(strings.TrimSpace(codeInput))
 	if codeValue == "" {
 		return result, nil
 	}

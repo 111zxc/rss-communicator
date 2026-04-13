@@ -126,6 +126,30 @@ func TestContactServiceDeleteMapsNotFound(t *testing.T) {
 	}
 }
 
+func TestContactServiceCreateEmailNormalizesPayload(t *testing.T) {
+	repo := &contactRepoStub{createdEmail: domain.Contact{ID: "email-1", Type: domain.ContactEmail}}
+	svc := NewContactService(repo)
+
+	got, err := svc.CreateEmail(context.Background(), CreateEmailContactInput{
+		Email:       " Alice@Example.com ",
+		DisplayName: strPtr(" Alice "),
+		Format:      "html",
+	})
+	if err != nil {
+		t.Fatalf("CreateEmail returned error: %v", err)
+	}
+
+	if got.ID != "email-1" {
+		t.Fatalf("unexpected contact: %+v", got)
+	}
+	if repo.createEmailValue != "alice@example.com" {
+		t.Fatalf("email was not normalized: %q", repo.createEmailValue)
+	}
+	if repo.createEmailCfg.Format != "html" {
+		t.Fatalf("unexpected format: %+v", repo.createEmailCfg)
+	}
+}
+
 type contactRepoStub struct {
 	createdTelegram        domain.Contact
 	createTelegramChatID   string
@@ -137,6 +161,11 @@ type contactRepoStub struct {
 	createHTTP            domain.HTTPContactConfig
 	createHTTPDisplayName *string
 	createHTTPStatus      domain.ContactStatus
+	createdEmail          domain.Contact
+	createEmailValue      string
+	createEmailCfg        domain.EmailContactConfig
+	createEmailDisplay    *string
+	createEmailStatus     domain.ContactStatus
 
 	updateHTTPErr error
 	deleteErr     error
@@ -156,6 +185,22 @@ func (s *contactRepoStub) CreateTelegram(_ context.Context, chatID string, usern
 
 func (s *contactRepoStub) UpdateTelegram(context.Context, string, string, *string, *string, domain.ContactStatus, *time.Time) (domain.Contact, error) {
 	return domain.Contact{}, nil
+}
+
+func (s *contactRepoStub) CreateEmail(_ context.Context, value string, displayName *string, status domain.ContactStatus, cfg domain.EmailContactConfig, _ *time.Time) (domain.Contact, error) {
+	s.createEmailValue = value
+	s.createEmailCfg = cfg
+	s.createEmailDisplay = displayName
+	s.createEmailStatus = status
+	return s.createdEmail, nil
+}
+
+func (s *contactRepoStub) UpdateEmail(context.Context, string, string, *string, domain.ContactStatus, domain.EmailContactConfig, *time.Time) (domain.Contact, error) {
+	return domain.Contact{}, nil
+}
+
+func (s *contactRepoStub) GetEmailConfig(context.Context, string) (domain.EmailContactConfig, error) {
+	return domain.EmailContactConfig{}, nil
 }
 
 func (s *contactRepoStub) CreateHTTP(_ context.Context, _ string, displayName *string, status domain.ContactStatus, cfg domain.HTTPContactConfig, _ *time.Time) (domain.Contact, error) {

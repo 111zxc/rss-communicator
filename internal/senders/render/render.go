@@ -3,6 +3,7 @@ package render
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"strings"
 	"time"
 
@@ -25,6 +26,23 @@ func Message(feed domain.Feed, items []domain.Item) string {
 		}
 		fmt.Fprintf(&b, "%d. %s\n%s", i+1, item.Title, item.Link)
 	}
+	return b.String()
+}
+
+func HTMLMessage(feed domain.Feed, items []domain.Item) string {
+	if len(items) == 0 {
+		return ""
+	}
+	if len(items) == 1 {
+		return fmt.Sprintf("<h1>%s</h1><p><a href=%q>%s</a></p>", html.EscapeString(items[0].Title), items[0].Link, html.EscapeString(items[0].Link))
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "<h1>%s</h1><p>%d new items</p><ol>", html.EscapeString(feed.Name), len(items))
+	for _, item := range items {
+		fmt.Fprintf(&b, "<li><a href=%q>%s</a></li>", item.Link, html.EscapeString(item.Title))
+	}
+	b.WriteString("</ol>")
 	return b.String()
 }
 

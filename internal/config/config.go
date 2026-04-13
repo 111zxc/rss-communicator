@@ -32,9 +32,27 @@ type HTTPConfig struct {
 	IdleTimeout  time.Duration
 }
 
+type EmailConfig struct {
+	Address     string
+	DisplayName string
+
+	IMAPHost         string
+	IMAPPort         int
+	IMAPUsername     string
+	IMAPPassword     string
+	IMAPMailbox      string
+	IMAPPollInterval time.Duration
+
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUsername string
+	SMTPPassword string
+}
+
 type Config struct {
 	DB       struct{ DSN string }
 	Telegram struct{ BotToken string }
+	Email    EmailConfig
 	Log      struct {
 		Level     slog.Level
 		Format    string
@@ -49,6 +67,18 @@ func MustLoad() Config {
 	var cfg Config
 	cfg.DB.DSN = Getenv("DB_DSN", "postgres://rss:rss@localhost:5432/rss?sslmode=disable")
 	cfg.Telegram.BotToken = os.Getenv("TELEGRAM_BOT_TOKEN")
+	cfg.Email.Address = Getenv("EMAIL_ADDRESS", "")
+	cfg.Email.DisplayName = Getenv("EMAIL_DISPLAY_NAME", "")
+	cfg.Email.IMAPHost = Getenv("EMAIL_IMAP_HOST", "")
+	cfg.Email.IMAPPort = MustInt(Getenv("EMAIL_IMAP_PORT", "993"))
+	cfg.Email.IMAPUsername = Getenv("EMAIL_IMAP_USERNAME", "")
+	cfg.Email.IMAPPassword = Getenv("EMAIL_IMAP_PASSWORD", "")
+	cfg.Email.IMAPMailbox = Getenv("EMAIL_IMAP_MAILBOX", "INBOX")
+	cfg.Email.IMAPPollInterval = MustDuration(Getenv("EMAIL_IMAP_POLL_INTERVAL", "30s"))
+	cfg.Email.SMTPHost = Getenv("EMAIL_SMTP_HOST", "")
+	cfg.Email.SMTPPort = MustInt(Getenv("EMAIL_SMTP_PORT", "465"))
+	cfg.Email.SMTPUsername = Getenv("EMAIL_SMTP_USERNAME", "")
+	cfg.Email.SMTPPassword = Getenv("EMAIL_SMTP_PASSWORD", "")
 
 	cfg.Log.Level = parseLevel(Getenv("LOG_LEVEL", "info"))
 	cfg.Log.Format = Getenv("LOG_FORMAT", "json")
@@ -114,4 +144,12 @@ func MustBool(s string) bool {
 		log.Panicf("invalid bool value: %q", s)
 	}
 	return v
+}
+
+func (c EmailConfig) SMTPEnabled() bool {
+	return c.Address != "" && c.SMTPHost != "" && c.SMTPUsername != "" && c.SMTPPassword != ""
+}
+
+func (c EmailConfig) IMAPEnabled() bool {
+	return c.IMAPHost != "" && c.IMAPUsername != "" && c.IMAPPassword != ""
 }

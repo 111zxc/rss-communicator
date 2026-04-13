@@ -84,6 +84,27 @@ func (h *ContactHandler) CreateTelegram(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, 201, mapContactResponse(contact))
 }
 
+func (h *ContactHandler) CreateEmail(w http.ResponseWriter, r *http.Request) {
+	var req dto.CreateEmailContactRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, 400, "INVALID_INPUT", "invalid request body", nil)
+		return
+	}
+
+	contact, err := h.contactService.CreateEmail(r.Context(), service.CreateEmailContactInput{
+		Email:       req.Email,
+		DisplayName: req.DisplayName,
+		Status:      req.Status,
+		Format:      req.Format,
+	})
+	if err != nil {
+		writeServiceError(w, err, "failed to create email contact")
+		return
+	}
+
+	writeJSON(w, 201, mapContactResponse(contact))
+}
+
 func (h *ContactHandler) CreateHTTP(w http.ResponseWriter, r *http.Request) {
 	var req dto.CreateHTTPContactRequest
 	if err := decodeJSON(r, &req); err != nil {
@@ -124,6 +145,29 @@ func (h *ContactHandler) UpdateTelegram(w http.ResponseWriter, r *http.Request) 
 	})
 	if err != nil {
 		writeServiceError(w, err, "failed to update telegram contact")
+		return
+	}
+
+	writeJSON(w, 200, mapContactResponse(contact))
+}
+
+func (h *ContactHandler) UpdateEmail(w http.ResponseWriter, r *http.Request) {
+	contactID := chi.URLParam(r, "contactID")
+
+	var req dto.UpdateEmailContactRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, 400, "INVALID_INPUT", "invalid request body", nil)
+		return
+	}
+
+	contact, err := h.contactService.UpdateEmail(r.Context(), contactID, service.UpdateEmailContactInput{
+		Email:       req.Email,
+		DisplayName: req.DisplayName,
+		Status:      req.Status,
+		Format:      req.Format,
+	})
+	if err != nil {
+		writeServiceError(w, err, "failed to update email contact")
 		return
 	}
 
@@ -207,6 +251,9 @@ func mapContactResponse(c domain.Contact) dto.ContactResponse {
 	}
 	if c.Telegram != nil {
 		resp.Username = c.Telegram.Username
+	}
+	if c.Email != nil {
+		resp.Email = &dto.EmailContactResponse{Format: c.Email.Format}
 	}
 	if c.HTTP != nil {
 		headers := make(map[string]string, len(c.HTTP.Headers))

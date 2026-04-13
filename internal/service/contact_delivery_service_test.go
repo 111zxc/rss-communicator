@@ -65,6 +65,18 @@ func (s *contactDeliveryContactsStub) UpdateTelegram(context.Context, string, st
 	return domain.Contact{}, nil
 }
 
+func (s *contactDeliveryContactsStub) CreateEmail(context.Context, string, *string, domain.ContactStatus, domain.EmailContactConfig, *time.Time) (domain.Contact, error) {
+	return domain.Contact{}, nil
+}
+
+func (s *contactDeliveryContactsStub) UpdateEmail(context.Context, string, string, *string, domain.ContactStatus, domain.EmailContactConfig, *time.Time) (domain.Contact, error) {
+	return domain.Contact{}, nil
+}
+
+func (s *contactDeliveryContactsStub) GetEmailConfig(context.Context, string) (domain.EmailContactConfig, error) {
+	return domain.EmailContactConfig{}, nil
+}
+
 func (s *contactDeliveryContactsStub) CreateHTTP(context.Context, string, *string, domain.ContactStatus, domain.HTTPContactConfig, *time.Time) (domain.Contact, error) {
 	return domain.Contact{}, nil
 }

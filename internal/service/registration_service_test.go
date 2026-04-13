@@ -102,10 +102,37 @@ func TestRegistrationServiceRejectsExhaustedRegistrationCode(t *testing.T) {
 	}
 }
 
+func TestRegistrationServiceRegisterEmailWithCode(t *testing.T) {
+	contacts := &registrationContactsRepoStub{
+		getByTypeErr: sql.ErrNoRows,
+		createdEmail: domain.Contact{ID: "contact-email-1", Type: domain.ContactEmail, Status: domain.ContactActive, Value: "alice@example.com"},
+	}
+	codes := &registrationCodesRepoForRegistrationStub{
+		code: domain.RegistrationCode{ID: "code-1", Code: "ABC123", Name: "Promo", Enabled: true},
+	}
+	svc := NewRegistrationService(contacts, codes, &registrationGroupsRepoStub{}, &subscriptionsRepoStubForGroups{})
+
+	got, err := svc.RegisterEmail(context.Background(), RegisterEmailInput{
+		Email: "Alice@Example.com",
+		Code:  "abc123",
+	})
+	if err != nil {
+		t.Fatalf("RegisterEmail returned error: %v", err)
+	}
+	if got.Contact.Value != "alice@example.com" {
+		t.Fatalf("expected normalized email contact, got %+v", got.Contact)
+	}
+	if contacts.createEmailValue != "alice@example.com" {
+		t.Fatalf("expected normalized email to be persisted, got %q", contacts.createEmailValue)
+	}
+}
+
 type registrationContactsRepoStub struct {
-	existing     domain.Contact
-	getByTypeErr error
-	created      domain.Contact
+	existing         domain.Contact
+	getByTypeErr     error
+	created          domain.Contact
+	createdEmail     domain.Contact
+	createEmailValue string
 }
 
 func (s *registrationContactsRepoStub) UpsertTelegramActive(context.Context, string, *string, *string, time.Time) (domain.Contact, error) {
@@ -116,6 +143,16 @@ func (s *registrationContactsRepoStub) CreateTelegram(context.Context, string, *
 }
 func (s *registrationContactsRepoStub) UpdateTelegram(context.Context, string, string, *string, *string, domain.ContactStatus, *time.Time) (domain.Contact, error) {
 	return domain.Contact{}, nil
+}
+func (s *registrationContactsRepoStub) CreateEmail(_ context.Context, value string, _ *string, _ domain.ContactStatus, _ domain.EmailContactConfig, _ *time.Time) (domain.Contact, error) {
+	s.createEmailValue = value
+	return s.createdEmail, nil
+}
+func (s *registrationContactsRepoStub) UpdateEmail(context.Context, string, string, *string, domain.ContactStatus, domain.EmailContactConfig, *time.Time) (domain.Contact, error) {
+	return domain.Contact{}, nil
+}
+func (s *registrationContactsRepoStub) GetEmailConfig(context.Context, string) (domain.EmailContactConfig, error) {
+	return domain.EmailContactConfig{}, nil
 }
 func (s *registrationContactsRepoStub) CreateHTTP(context.Context, string, *string, domain.ContactStatus, domain.HTTPContactConfig, *time.Time) (domain.Contact, error) {
 	return domain.Contact{}, nil

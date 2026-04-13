@@ -44,6 +44,7 @@ type Contact struct {
 	Value       string
 	DisplayName *string
 	Telegram    *TelegramContactConfig
+	Email       *EmailContactConfig
 	HTTP        *HTTPContactConfig
 	VerifiedAt  *time.Time
 	CreatedAt   time.Time
@@ -52,6 +53,10 @@ type Contact struct {
 
 type TelegramContactConfig struct {
 	Username *string
+}
+
+type EmailContactConfig struct {
+	Format string
 }
 
 type HTTPContactConfig struct {

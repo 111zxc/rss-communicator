@@ -107,6 +107,15 @@ func (s *contactsRepoStubForGroups) CreateTelegram(context.Context, string, *str
 func (s *contactsRepoStubForGroups) UpdateTelegram(context.Context, string, string, *string, *string, domain.ContactStatus, *time.Time) (domain.Contact, error) {
 	return domain.Contact{}, nil
 }
+func (s *contactsRepoStubForGroups) CreateEmail(context.Context, string, *string, domain.ContactStatus, domain.EmailContactConfig, *time.Time) (domain.Contact, error) {
+	return domain.Contact{}, nil
+}
+func (s *contactsRepoStubForGroups) UpdateEmail(context.Context, string, string, *string, domain.ContactStatus, domain.EmailContactConfig, *time.Time) (domain.Contact, error) {
+	return domain.Contact{}, nil
+}
+func (s *contactsRepoStubForGroups) GetEmailConfig(context.Context, string) (domain.EmailContactConfig, error) {
+	return domain.EmailContactConfig{}, nil
+}
 func (s *contactsRepoStubForGroups) CreateHTTP(context.Context, string, *string, domain.ContactStatus, domain.HTTPContactConfig, *time.Time) (domain.Contact, error) {
 	return domain.Contact{}, nil
 }

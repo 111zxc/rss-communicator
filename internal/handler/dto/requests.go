@@ -36,11 +36,25 @@ type CreateTelegramContactRequest struct {
 	Status      string  `json:"status"`
 }
 
+type CreateEmailContactRequest struct {
+	Email       string  `json:"email"`
+	DisplayName *string `json:"display_name"`
+	Status      string  `json:"status"`
+	Format      string  `json:"format"`
+}
+
 type UpdateTelegramContactRequest struct {
 	ChatID      string  `json:"chat_id"`
 	Username    *string `json:"username"`
 	DisplayName *string `json:"display_name"`
 	Status      string  `json:"status"`
+}
+
+type UpdateEmailContactRequest struct {
+	Email       string  `json:"email"`
+	DisplayName *string `json:"display_name"`
+	Status      string  `json:"status"`
+	Format      string  `json:"format"`
 }
 
 type UpdateHTTPContactRequest struct {
