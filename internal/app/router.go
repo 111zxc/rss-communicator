@@ -29,6 +29,7 @@ func NewRouter(h *handler.Handler) http.Handler {
 			r.Delete("/{feedID}", h.Feed.Delete)
 
 			r.Route("/{feedID}/subscriptions", func(r chi.Router) {
+				r.Get("/", h.Subscription.ListByFeed)
 				r.Post("/", h.Subscription.Bind)
 				r.Delete("/{contactID}", h.Subscription.Unbind)
 			})
@@ -36,6 +37,14 @@ func NewRouter(h *handler.Handler) http.Handler {
 
 		r.Route("/contacts", func(r chi.Router) {
 			r.Get("/", h.Contact.List)
+			r.Get("/{contactID}", h.Contact.Get)
+			r.Get("/{contactID}/subscriptions", h.Subscription.ListByContact)
+			r.Post("/telegram", h.Contact.CreateTelegram)
+			r.Post("/http", h.Contact.CreateHTTP)
+			r.Put("/telegram/{contactID}", h.Contact.UpdateTelegram)
+			r.Put("/http/{contactID}", h.Contact.UpdateHTTP)
+			r.Post("/{contactID}/test-send", h.Contact.TestSend)
+			r.Delete("/{contactID}", h.Contact.Delete)
 		})
 	})
 

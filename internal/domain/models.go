@@ -43,9 +43,22 @@ type Contact struct {
 	Status      ContactStatus
 	Value       string
 	DisplayName *string
+	Telegram    *TelegramContactConfig
+	HTTP        *HTTPContactConfig
 	VerifiedAt  *time.Time
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+}
+
+type TelegramContactConfig struct {
+	Username *string
+}
+
+type HTTPContactConfig struct {
+	Method       string
+	URL          string
+	Headers      map[string]string
+	BodyTemplate *string
 }
 
 type Subscription struct {

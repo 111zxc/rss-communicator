@@ -70,8 +70,8 @@ func (h *FeedHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Name:            req.Name,
 		URL:             req.URL,
 		IntervalSeconds: req.IntervalSeconds,
-		Enabled:         req.Enabled,
-		BatchEnabled:    req.BatchEnabled,
+		Enabled:         boolOrDefault(req.Enabled, true),
+		BatchEnabled:    boolOrDefault(req.BatchEnabled, false),
 		BatchWindowSecs: req.BatchWindowSecs,
 	})
 	if err != nil {
@@ -92,6 +92,13 @@ func (h *FeedHandler) Create(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:       f.CreatedAt,
 		UpdatedAt:       f.UpdatedAt,
 	})
+}
+
+func boolOrDefault(v *bool, def bool) bool {
+	if v == nil {
+		return def
+	}
+	return *v
 }
 
 func (h *FeedHandler) Update(w http.ResponseWriter, r *http.Request) {

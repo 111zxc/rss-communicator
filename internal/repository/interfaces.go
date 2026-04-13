@@ -37,13 +37,20 @@ type FeedsRepository interface {
 
 type ContactsRepository interface {
 	UpsertTelegramActive(ctx context.Context, chatID string, username *string, displayName *string, verifiedAt time.Time) (domain.Contact, error)
+	CreateTelegram(ctx context.Context, chatID string, username *string, displayName *string, status domain.ContactStatus, verifiedAt *time.Time) (domain.Contact, error)
+	UpdateTelegram(ctx context.Context, contactID string, chatID string, username *string, displayName *string, status domain.ContactStatus, verifiedAt *time.Time) (domain.Contact, error)
+	CreateHTTP(ctx context.Context, value string, displayName *string, status domain.ContactStatus, cfg domain.HTTPContactConfig, verifiedAt *time.Time) (domain.Contact, error)
+	UpdateHTTP(ctx context.Context, contactID string, value string, displayName *string, status domain.ContactStatus, cfg domain.HTTPContactConfig, verifiedAt *time.Time) (domain.Contact, error)
+	GetHTTPConfig(ctx context.Context, contactID string) (domain.HTTPContactConfig, error)
 	GetByTypeValue(ctx context.Context, typ domain.ContactType, value string) (domain.Contact, error)
 	GetByID(ctx context.Context, id string) (domain.Contact, error)
 	List(ctx context.Context, limit, offset int) ([]domain.Contact, int, error)
+	Delete(ctx context.Context, id string) error
 }
 
 type SubscriptionsRepository interface {
 	ListByFeed(ctx context.Context, feedID string) ([]domain.Subscription, error)
+	ListByContact(ctx context.Context, contactID string) ([]domain.Subscription, error)
 	Add(ctx context.Context, feedID, contactID string) error
 	Remove(ctx context.Context, feedID, contactID string) error
 }

@@ -17,6 +17,68 @@ func NewSubscriptionHandler(subService *service.SubscriptionService) *Subscripti
 	return &SubscriptionHandler{subService: subService}
 }
 
+func (h *SubscriptionHandler) ListByFeed(w http.ResponseWriter, r *http.Request) {
+	feedID := chi.URLParam(r, "feedID")
+	if feedID == "" {
+		writeError(w, 400, "INVALID_INPUT", "feedID is required", nil)
+		return
+	}
+
+	subs, err := h.subService.ListByFeed(r.Context(), feedID)
+	if err != nil {
+		switch err {
+		case service.ErrBadRequest:
+			writeError(w, 400, "INVALID_INPUT", "invalid feed id", nil)
+		case service.ErrNotFound:
+			writeError(w, 404, "NOT_FOUND", "feed not found", nil)
+		default:
+			writeError(w, 500, "INTERNAL_ERROR", "failed to list subscriptions", nil)
+		}
+		return
+	}
+
+	out := make([]dto.SubscriptionResponse, 0, len(subs))
+	for _, sub := range subs {
+		out = append(out, dto.SubscriptionResponse{
+			FeedID:    sub.FeedID,
+			ContactID: sub.ContactID,
+			CreatedAt: sub.CreatedAt,
+		})
+	}
+	writeJSON(w, 200, dto.ListResponse[dto.SubscriptionResponse]{Items: out, Total: len(out)})
+}
+
+func (h *SubscriptionHandler) ListByContact(w http.ResponseWriter, r *http.Request) {
+	contactID := chi.URLParam(r, "contactID")
+	if contactID == "" {
+		writeError(w, 400, "INVALID_INPUT", "contactID is required", nil)
+		return
+	}
+
+	subs, err := h.subService.ListByContact(r.Context(), contactID)
+	if err != nil {
+		switch err {
+		case service.ErrBadRequest:
+			writeError(w, 400, "INVALID_INPUT", "invalid contact id", nil)
+		case service.ErrNotFound:
+			writeError(w, 404, "NOT_FOUND", "contact not found", nil)
+		default:
+			writeError(w, 500, "INTERNAL_ERROR", "failed to list subscriptions", nil)
+		}
+		return
+	}
+
+	out := make([]dto.SubscriptionResponse, 0, len(subs))
+	for _, sub := range subs {
+		out = append(out, dto.SubscriptionResponse{
+			FeedID:    sub.FeedID,
+			ContactID: sub.ContactID,
+			CreatedAt: sub.CreatedAt,
+		})
+	}
+	writeJSON(w, 200, dto.ListResponse[dto.SubscriptionResponse]{Items: out, Total: len(out)})
+}
+
 // POST /api/v1/feeds/{feedID}/subscriptions
 func (h *SubscriptionHandler) Bind(w http.ResponseWriter, r *http.Request) {
 	feedID := chi.URLParam(r, "feedID")

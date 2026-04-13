@@ -22,15 +22,23 @@ type ListResponse[T any] struct {
 }
 
 type ContactResponse struct {
-	ID          string     `json:"id"`
-	Type        string     `json:"type"`
-	Value       string     `json:"value"`
-	Username    *string    `json:"username,omitempty"`
-	DisplayName *string    `json:"display_name,omitempty"`
-	Status      string     `json:"status"`
-	VerifiedAt  *time.Time `json:"verified_at,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID          string               `json:"id"`
+	Type        string               `json:"type"`
+	Value       string               `json:"value"`
+	Username    *string              `json:"username,omitempty"`
+	DisplayName *string              `json:"display_name,omitempty"`
+	HTTP        *HTTPContactResponse `json:"http,omitempty"`
+	Status      string               `json:"status"`
+	VerifiedAt  *time.Time           `json:"verified_at,omitempty"`
+	CreatedAt   time.Time            `json:"created_at"`
+	UpdatedAt   time.Time            `json:"updated_at"`
+}
+
+type HTTPContactResponse struct {
+	Method       string            `json:"method"`
+	URL          string            `json:"url"`
+	Headers      map[string]string `json:"headers"`
+	BodyTemplate *string           `json:"body_template,omitempty"`
 }
 
 type SubscriptionResponse struct {

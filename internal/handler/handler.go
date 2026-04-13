@@ -9,10 +9,10 @@ type Handler struct {
 	Health       *HealthHandler
 }
 
-func New(feed *service.FeedService, contact *service.ContactService, sub *service.SubscriptionService) *Handler {
+func New(feed *service.FeedService, contact *service.ContactService, contactDelivery *service.ContactDeliveryService, sub *service.SubscriptionService) *Handler {
 	return &Handler{
 		Feed:         NewFeedHandler(feed),
-		Contact:      NewContactHandler(contact),
+		Contact:      NewContactHandler(contact, contactDelivery),
 		Subscription: NewSubscriptionHandler(sub),
 		Health:       NewHealthHandler(),
 	}

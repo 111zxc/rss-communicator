@@ -35,6 +35,29 @@ func (r *SubscriptionsRepository) ListByFeed(ctx context.Context, feedID string)
 	return out, rows.Err()
 }
 
+func (r *SubscriptionsRepository) ListByContact(ctx context.Context, contactID string) ([]domain.Subscription, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, feed_id, contact_id, enabled, created_at
+		FROM subscriptions
+		WHERE contact_id=$1 AND enabled=true
+		ORDER BY created_at DESC
+	`, contactID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.Subscription
+	for rows.Next() {
+		var s domain.Subscription
+		if err := rows.Scan(&s.ID, &s.FeedID, &s.ContactID, &s.Enabled, &s.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
 func (r *SubscriptionsRepository) Add(ctx context.Context, feedID, contactID string) error {
 	const q = `
 INSERT INTO subscriptions (feed_id, contact_id, created_at)

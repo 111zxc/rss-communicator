@@ -15,6 +15,8 @@ import (
 	"github.com/111zxc/rss-communicator/internal/runtime"
 	"github.com/111zxc/rss-communicator/internal/runtime/queue/memory"
 	"github.com/111zxc/rss-communicator/internal/runtime/worker"
+	"github.com/111zxc/rss-communicator/internal/senders"
+	httpsender "github.com/111zxc/rss-communicator/internal/senders/http"
 	tgsender "github.com/111zxc/rss-communicator/internal/senders/telegram"
 	"github.com/111zxc/rss-communicator/internal/service"
 )
@@ -69,17 +71,20 @@ func RunRSSD(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		_ = rs.Run(ctx)
 	}()
 
-	// Telegram sender (delivery)
-	if cfg.Telegram.BotToken == "" {
-		log.Error("TELEGRAM_BOT_TOKEN is empty (needed for sending too)")
-		return context.Canceled
+	var telegramDeliverySender senders.Sender
+	if cfg.Telegram.BotToken != "" {
+		tgAPI, err := tgbotapi.NewBotAPI(cfg.Telegram.BotToken)
+		if err != nil {
+			log.Error("telegram init failed", "err", err)
+			return err
+		}
+		telegramDeliverySender = tgsender.New(tgAPI)
+	} else {
+		log.Warn("telegram sender is disabled: TELEGRAM_BOT_TOKEN is empty")
 	}
-	tgAPI, err := tgbotapi.NewBotAPI(cfg.Telegram.BotToken)
-	if err != nil {
-		log.Error("telegram init failed", "err", err)
-		return err
-	}
-	sender := tgsender.New(tgAPI)
+
+	httpDeliverySender := httpsender.New(db.Contacts(), &http.Client{Timeout: cfg.RSSD.HTTPTimeout})
+	sender := senders.NewRouter(telegramDeliverySender, httpDeliverySender)
 
 	// Delivery worker pool + rate limit
 	limiter := runtime.NewTokenBucket(cfg.RSSD.TelegramRPS, cfg.RSSD.TelegramBurst)
@@ -111,16 +116,18 @@ func RunRSSD(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		"deliver_workers", 4,
 		"tg_rps", 5.0,
 		"tg_burst", 10,
+		"http_timeout", cfg.RSSD.HTTPTimeout.String(),
 	)
 
 	// --- services ---
 	clock := service.SystemClock{}
 	feedSvc := service.NewFeedService(db.Feeds(), clock)
 	contactSvc := service.NewContactService(db.Contacts())
+	contactDeliverySvc := service.NewContactDeliveryService(db.Contacts(), sender)
 	subSvc := service.NewSubscriptionService(db.Subscriptions(), db.Feeds(), db.Contacts())
 
 	// --- handlers ---
-	h := handler.New(feedSvc, contactSvc, subSvc)
+	h := handler.New(feedSvc, contactSvc, contactDeliverySvc, subSvc)
 
 	// --- router ---
 	router := NewRouter(h)

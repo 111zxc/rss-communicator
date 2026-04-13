@@ -16,6 +16,7 @@ type RSSDConfig struct {
 	DeliveryWorkers int
 	TelegramRPS     float64
 	TelegramBurst   int
+	HTTPTimeout     time.Duration
 
 	RetryScheduleTick time.Duration
 	RetryBatch        int
@@ -65,6 +66,7 @@ func MustLoad() Config {
 	cfg.RSSD.DeliveryWorkers = MustInt(Getenv("DELIVERY_WORKERS", "4"))
 	cfg.RSSD.TelegramRPS = MustFloat(Getenv("TELEGRAM_RPS", "5"))
 	cfg.RSSD.TelegramBurst = MustInt(Getenv("TELEGRAM_BURST", "10"))
+	cfg.RSSD.HTTPTimeout = MustDuration(Getenv("DELIVERY_HTTP_TIMEOUT", "10s"))
 
 	cfg.RSSD.RetryScheduleTick = MustDuration(Getenv("RETRY_SCHEDULE_TICK", "5s"))
 	cfg.RSSD.RetryBatch = MustInt(Getenv("RETRY_BATCH", "200"))
