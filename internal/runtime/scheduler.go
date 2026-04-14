@@ -33,7 +33,8 @@ func (s *Scheduler) Run(ctx context.Context) error {
 			return ctx.Err()
 		case <-t.C:
 			now := time.Now().UTC()
-			feeds, err := s.db.Feeds().ListDue(ctx, now, s.limit)
+			nextAt := now.Add(s.tick)
+			feeds, err := s.db.Feeds().ClaimDue(ctx, now, nextAt, s.limit)
 			if err != nil {
 				s.log.Error("scheduler list due feeds failed", "err", err)
 				continue

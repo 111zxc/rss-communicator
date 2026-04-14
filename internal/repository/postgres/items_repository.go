@@ -7,9 +7,10 @@ import (
 	"github.com/111zxc/rss-communicator/internal/domain"
 )
 
-type ItemsRepository struct{ db *sql.DB }
+type ItemsRepository struct{ db dbtx }
 
-func NewItemsRepository(db *sql.DB) *ItemsRepository { return &ItemsRepository{db: db} }
+func NewItemsRepository(db *sql.DB) *ItemsRepository   { return &ItemsRepository{db: db} }
+func NewItemsRepositoryTx(tx *sql.Tx) *ItemsRepository { return &ItemsRepository{db: tx} }
 
 func (r *ItemsRepository) InsertMany(ctx context.Context, items []domain.Item) ([]domain.Item, error) {
 	if len(items) == 0 {

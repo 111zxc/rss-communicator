@@ -7,10 +7,14 @@ import (
 	"github.com/111zxc/rss-communicator/internal/domain"
 )
 
-type SubscriptionsRepository struct{ db *sql.DB }
+type SubscriptionsRepository struct{ db dbtx }
 
 func NewSubscriptionsRepository(db *sql.DB) *SubscriptionsRepository {
 	return &SubscriptionsRepository{db: db}
+}
+
+func NewSubscriptionsRepositoryTx(tx *sql.Tx) *SubscriptionsRepository {
+	return &SubscriptionsRepository{db: tx}
 }
 
 func (r *SubscriptionsRepository) ListByFeed(ctx context.Context, feedID string) ([]domain.Subscription, error) {

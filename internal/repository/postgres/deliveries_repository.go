@@ -10,9 +10,18 @@ import (
 	"github.com/111zxc/rss-communicator/internal/domain"
 )
 
-type DeliveriesRepository struct{ db *sql.DB }
+type DeliveriesRepository struct {
+	db   *sql.DB
+	exec dbtx
+}
 
-func NewDeliveriesRepository(db *sql.DB) *DeliveriesRepository { return &DeliveriesRepository{db: db} }
+func NewDeliveriesRepository(db *sql.DB) *DeliveriesRepository {
+	return &DeliveriesRepository{db: db, exec: db}
+}
+
+func NewDeliveriesRepositoryTx(tx *sql.Tx) *DeliveriesRepository {
+	return &DeliveriesRepository{exec: tx}
+}
 
 func (r *DeliveriesRepository) CreatePendingIfNotExists(ctx context.Context, contactID, itemID string, availableAt time.Time) (bool, string, error) {
 	var id string
@@ -204,7 +213,7 @@ func (r *DeliveriesRepository) ClaimBatch(ctx context.Context, deliveryID string
 }
 
 func (r *DeliveriesRepository) RecoverInProgress(ctx context.Context, now time.Time) (int64, error) {
-	res, err := r.db.ExecContext(ctx, `
+	res, err := r.exec.ExecContext(ctx, `
 		UPDATE deliveries
 		SET status='failed', last_error=$1, next_retry_at=$2, updated_at=now()
 		WHERE status='in_progress'
@@ -216,7 +225,7 @@ func (r *DeliveriesRepository) RecoverInProgress(ctx context.Context, now time.T
 }
 
 func (r *DeliveriesRepository) MarkSent(ctx context.Context, deliveryID string, sentAt time.Time) error {
-	_, err := r.db.ExecContext(ctx, `
+	_, err := r.exec.ExecContext(ctx, `
 		UPDATE deliveries SET status='sent', sent_at=$2, next_retry_at=NULL, updated_at=now()
 		WHERE id=$1
 	`, deliveryID, sentAt)
@@ -232,12 +241,12 @@ func (r *DeliveriesRepository) MarkManySent(ctx context.Context, deliveryIDs []s
 		SET status='sent', sent_at=$1, next_retry_at=NULL, updated_at=now()
 		WHERE id IN (%s)
 	`, sentAt, deliveryIDs)
-	_, err := r.db.ExecContext(ctx, query, args...)
+	_, err := r.exec.ExecContext(ctx, query, args...)
 	return err
 }
 
 func (r *DeliveriesRepository) MarkFailed(ctx context.Context, deliveryID string, errMsg string, nextRetryAt *time.Time) error {
-	_, err := r.db.ExecContext(ctx, `
+	_, err := r.exec.ExecContext(ctx, `
 		UPDATE deliveries
 		SET status='failed', attempt_count=attempt_count+1, last_error=$2, last_attempt_at=now(),
 		    next_retry_at=$3, updated_at=now()
@@ -256,12 +265,12 @@ func (r *DeliveriesRepository) MarkManyFailed(ctx context.Context, deliveryIDs [
 		    next_retry_at=$2, updated_at=now()
 		WHERE id IN (%s)
 	`, errMsg, nextRetryAt, deliveryIDs)
-	_, err := r.db.ExecContext(ctx, query, args...)
+	_, err := r.exec.ExecContext(ctx, query, args...)
 	return err
 }
 
 func (r *DeliveriesRepository) GetByID(ctx context.Context, id string) (domain.Delivery, error) {
-	row := r.db.QueryRowContext(ctx, `
+	row := r.exec.QueryRowContext(ctx, `
 		SELECT id, item_id, contact_id, status, attempt_count, last_error, last_attempt_at, sent_at, next_retry_at, created_at, updated_at
 		FROM deliveries WHERE id=$1
 	`, id)
@@ -294,7 +303,7 @@ func (r *DeliveriesRepository) GetByID(ctx context.Context, id string) (domain.D
 }
 
 func (r *DeliveriesRepository) ListRetryDue(ctx context.Context, now time.Time, limit int, maxAttempts int) ([]string, error) {
-	rows, err := r.db.QueryContext(ctx, `
+	rows, err := r.exec.QueryContext(ctx, `
 		SELECT id
 		FROM deliveries
 		WHERE status IN ('pending', 'failed')

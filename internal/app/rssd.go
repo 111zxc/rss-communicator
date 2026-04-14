@@ -170,9 +170,9 @@ func RunRSSD(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	contactSvc := service.NewContactService(db.Contacts())
 	contactDeliverySvc := service.NewContactDeliveryService(db.Contacts(), sender)
 	subSvc := service.NewSubscriptionService(db.Subscriptions(), db.Feeds(), db.Contacts())
-	groupSvc := service.NewGroupService(db.Groups(), db.Feeds(), db.Contacts(), db.Subscriptions())
+	groupSvc := service.NewGroupService(db.Groups(), db.Feeds(), db.Contacts(), db.Subscriptions(), db)
 	regCodeSvc := service.NewRegistrationCodeService(db.RegistrationCodes(), db.Groups())
-	regSvc := service.NewRegistrationService(db.Contacts(), db.RegistrationCodes(), db.Groups(), db.Subscriptions())
+	regSvc := service.NewRegistrationService(db.Contacts(), db.RegistrationCodes(), db.Groups(), db.Subscriptions(), db)
 
 	if cfg.Email.IMAPEnabled() {
 		mailbox := appemail.NewIMAPMailbox(appemail.IMAPConfig{

@@ -119,7 +119,7 @@ func (h *FeedHandler) Update(w http.ResponseWriter, r *http.Request) {
 		BatchWindowSecs: req.BatchWindowSecs,
 	})
 	if err != nil {
-		writeError(w, 400, "INVALID_INPUT", "invalid feed fields", nil)
+		writeServiceError(w, err, "invalid feed fields")
 		return
 	}
 
@@ -146,7 +146,7 @@ func (h *FeedHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.feedService.Delete(r.Context(), feedID); err != nil {
-		writeError(w, 500, "INTERNAL_ERROR", "failed to delete feed", nil)
+		writeServiceError(w, err, "failed to delete feed")
 		return
 	}
 

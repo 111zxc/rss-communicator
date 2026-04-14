@@ -25,6 +25,7 @@ type RegistrationService struct {
 	codes         repository.RegistrationCodesRepository
 	groups        repository.GroupsRepository
 	subscriptions repository.SubscriptionsRepository
+	txRunner      repository.Database
 }
 
 func NewRegistrationService(
@@ -32,12 +33,18 @@ func NewRegistrationService(
 	codes repository.RegistrationCodesRepository,
 	groups repository.GroupsRepository,
 	subscriptions repository.SubscriptionsRepository,
+	txRunner ...repository.Database,
 ) *RegistrationService {
+	var db repository.Database
+	if len(txRunner) > 0 {
+		db = txRunner[0]
+	}
 	return &RegistrationService{
 		contacts:      contacts,
 		codes:         codes,
 		groups:        groups,
 		subscriptions: subscriptions,
+		txRunner:      db,
 	}
 }
 
@@ -71,19 +78,25 @@ func (s *RegistrationService) RegisterTelegram(ctx context.Context, in RegisterT
 	displayName := normalizeOptional(in.DisplayName)
 	now := time.Now().UTC()
 
-	contact, err := s.createContactIfNeeded(
-		ctx,
-		domain.ContactTelegram,
-		chatID,
-		func() (domain.Contact, error) {
-			return s.contacts.CreateTelegram(ctx, chatID, username, displayName, domain.ContactActive, &now)
-		},
-	)
-	if err != nil {
-		return RegisterResult{}, err
-	}
+	var result RegisterResult
+	err := s.withRepos(ctx, func(contacts repository.ContactsRepository, codes repository.RegistrationCodesRepository, groups repository.GroupsRepository, subscriptions repository.SubscriptionsRepository) error {
+		contact, err := s.createContactIfNeeded(
+			ctx,
+			contacts,
+			domain.ContactTelegram,
+			chatID,
+			func() (domain.Contact, error) {
+				return contacts.CreateTelegram(ctx, chatID, username, displayName, domain.ContactActive, &now)
+			},
+		)
+		if err != nil {
+			return err
+		}
 
-	return s.applyRegistrationCode(ctx, contact, in.Code, now)
+		result, err = s.applyRegistrationCode(ctx, codes, groups, subscriptions, contact, in.Code, now)
+		return err
+	})
+	return result, err
 }
 
 func (s *RegistrationService) RegisterEmail(ctx context.Context, in RegisterEmailInput) (RegisterResult, error) {
@@ -104,28 +117,35 @@ func (s *RegistrationService) RegisterEmail(ctx context.Context, in RegisterEmai
 	}
 	now := time.Now().UTC()
 
-	contact, err := s.createContactIfNeeded(
-		ctx,
-		domain.ContactEmail,
-		emailValue,
-		func() (domain.Contact, error) {
-			return s.contacts.CreateEmail(ctx, emailValue, displayName, domain.ContactActive, domain.EmailContactConfig{Format: format}, &now)
-		},
-	)
-	if err != nil {
-		return RegisterResult{}, err
-	}
+	var result RegisterResult
+	err = s.withRepos(ctx, func(contacts repository.ContactsRepository, codes repository.RegistrationCodesRepository, groups repository.GroupsRepository, subscriptions repository.SubscriptionsRepository) error {
+		contact, err := s.createContactIfNeeded(
+			ctx,
+			contacts,
+			domain.ContactEmail,
+			emailValue,
+			func() (domain.Contact, error) {
+				return contacts.CreateEmail(ctx, emailValue, displayName, domain.ContactActive, domain.EmailContactConfig{Format: format}, &now)
+			},
+		)
+		if err != nil {
+			return err
+		}
 
-	return s.applyRegistrationCode(ctx, contact, in.Code, now)
+		result, err = s.applyRegistrationCode(ctx, codes, groups, subscriptions, contact, in.Code, now)
+		return err
+	})
+	return result, err
 }
 
 func (s *RegistrationService) createContactIfNeeded(
 	ctx context.Context,
+	contacts repository.ContactsRepository,
 	contactType domain.ContactType,
 	value string,
 	create func() (domain.Contact, error),
 ) (domain.Contact, error) {
-	if existing, err := s.contacts.GetByTypeValue(ctx, contactType, value); err == nil {
+	if existing, err := contacts.GetByTypeValue(ctx, contactType, value); err == nil {
 		if existing.Status == domain.ContactActive {
 			return domain.Contact{}, ErrAlreadyRegistered
 		}
@@ -136,7 +156,7 @@ func (s *RegistrationService) createContactIfNeeded(
 	return create()
 }
 
-func (s *RegistrationService) applyRegistrationCode(ctx context.Context, contact domain.Contact, codeInput string, now time.Time) (RegisterResult, error) {
+func (s *RegistrationService) applyRegistrationCode(ctx context.Context, codes repository.RegistrationCodesRepository, groups repository.GroupsRepository, subscriptions repository.SubscriptionsRepository, contact domain.Contact, codeInput string, now time.Time) (RegisterResult, error) {
 	result := RegisterResult{Contact: contact}
 
 	codeValue := strings.ToUpper(strings.TrimSpace(codeInput))
@@ -144,7 +164,7 @@ func (s *RegistrationService) applyRegistrationCode(ctx context.Context, contact
 		return result, nil
 	}
 
-	code, err := s.codes.GetByCode(ctx, codeValue)
+	code, err := codes.GetByCode(ctx, codeValue)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RegisterResult{}, ErrRegistrationCodeNotFound
 	}
@@ -161,29 +181,38 @@ func (s *RegistrationService) applyRegistrationCode(ctx context.Context, contact
 		return RegisterResult{}, ErrRegistrationCodeExhausted
 	}
 
-	groups, err := s.codes.ListGroups(ctx, code.ID)
+	appliedGroups, err := codes.ListGroups(ctx, code.ID)
 	if err != nil {
 		return RegisterResult{}, err
 	}
-	for _, group := range groups {
-		if err := s.groups.AddContact(ctx, group.ID, contact.ID); err != nil {
+	for _, group := range appliedGroups {
+		if err := groups.AddContact(ctx, group.ID, contact.ID); err != nil {
 			return RegisterResult{}, err
 		}
-		feedIDs, err := s.groups.ListFeedIDs(ctx, group.ID)
+		feedIDs, err := groups.ListFeedIDs(ctx, group.ID)
 		if err != nil {
 			return RegisterResult{}, err
 		}
 		for _, feedID := range feedIDs {
-			if err := s.subscriptions.AddGroup(ctx, feedID, contact.ID, group.ID); err != nil {
+			if err := subscriptions.AddGroup(ctx, feedID, contact.ID, group.ID); err != nil {
 				return RegisterResult{}, err
 			}
 		}
 	}
-	if err := s.codes.IncrementUse(ctx, code.ID); err != nil {
+	if err := codes.IncrementUse(ctx, code.ID); err != nil {
 		return RegisterResult{}, err
 	}
 
 	result.AppliedCode = &code
-	result.AppliedGroups = groups
+	result.AppliedGroups = appliedGroups
 	return result, nil
+}
+
+func (s *RegistrationService) withRepos(ctx context.Context, fn func(repository.ContactsRepository, repository.RegistrationCodesRepository, repository.GroupsRepository, repository.SubscriptionsRepository) error) error {
+	if s.txRunner == nil {
+		return fn(s.contacts, s.codes, s.groups, s.subscriptions)
+	}
+	return s.txRunner.WithinTx(ctx, func(store repository.Store) error {
+		return fn(store.Contacts(), store.RegistrationCodes(), store.Groups(), store.Subscriptions())
+	})
 }

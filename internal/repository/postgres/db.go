@@ -45,6 +45,17 @@ func New(dsn string) (*DB, error) {
 func (d *DB) Close() error                   { return d.db.Close() }
 func (d *DB) Ping(ctx context.Context) error { return d.db.PingContext(ctx) }
 func (d *DB) SQL() *sql.DB                   { return d.db }
+func (d *DB) WithinTx(ctx context.Context, fn func(repository.Store) error) error {
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := fn(newTxStore(tx)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
 
 func (d *DB) Contacts() repository.ContactsRepository { return d.contacts }
 func (d *DB) Feeds() repository.FeedsRepository       { return d.feeds }

@@ -28,11 +28,13 @@ type Store interface {
 type Database interface {
 	Store
 	Close() error
+	WithinTx(ctx context.Context, fn func(Store) error) error
 }
 
 type FeedsRepository interface {
 	Create(ctx context.Context, f domain.Feed) (domain.Feed, error)
 	ListDue(ctx context.Context, now time.Time, limit int) ([]domain.Feed, error)
+	ClaimDue(ctx context.Context, now time.Time, nextAt time.Time, limit int) ([]domain.Feed, error)
 	MarkFetched(ctx context.Context, feedID string, fetchedAt time.Time, nextAt time.Time, etag, lastModified *string) error
 	MarkFetchError(ctx context.Context, feedID string, errMsg string) error
 	MarkInitialized(ctx context.Context, feedID string, at time.Time) error

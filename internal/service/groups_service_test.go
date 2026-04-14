@@ -81,6 +81,9 @@ func (s *feedsRepoStubForGroups) Create(context.Context, domain.Feed) (domain.Fe
 func (s *feedsRepoStubForGroups) ListDue(context.Context, time.Time, int) ([]domain.Feed, error) {
 	return nil, nil
 }
+func (s *feedsRepoStubForGroups) ClaimDue(context.Context, time.Time, time.Time, int) ([]domain.Feed, error) {
+	return nil, nil
+}
 func (s *feedsRepoStubForGroups) MarkFetched(context.Context, string, time.Time, time.Time, *string, *string) error {
 	return nil
 }

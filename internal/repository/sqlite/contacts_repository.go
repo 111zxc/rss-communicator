@@ -10,11 +10,16 @@ import (
 )
 
 type ContactsRepository struct {
-	db *sql.DB
+	db   *sql.DB
+	exec dbtx
 }
 
 func NewContactsRepository(db *sql.DB) *ContactsRepository {
-	return &ContactsRepository{db: db}
+	return &ContactsRepository{db: db, exec: db}
+}
+
+func NewContactsRepositoryTx(tx *sql.Tx) *ContactsRepository {
+	return &ContactsRepository{exec: tx}
 }
 
 func (r *ContactsRepository) UpsertTelegramActive(
@@ -25,15 +30,9 @@ func (r *ContactsRepository) UpsertTelegramActive(
 	verifiedAt time.Time,
 ) (domain.Contact, error) {
 
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return domain.Contact{}, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
 	var c domain.Contact
-
-	row := tx.QueryRowContext(ctx, `
+	err := r.withTx(ctx, func(tx *sql.Tx) error {
+		row := tx.QueryRowContext(ctx, `
 		INSERT INTO contacts (type, status, value, display_name, verified_at)
 		VALUES ($1, 'active', $2, $3, $4)
 		ON CONFLICT (type, value) DO UPDATE SET
@@ -52,48 +51,49 @@ func (r *ContactsRepository) UpsertTelegramActive(
 			updated_at
 	`, string(domain.ContactTelegram), chatID, displayName, verifiedAt)
 
-	var (
-		typ   string
-		stat  string
-		disp  sql.NullString
-		verif sql.NullTime
-	)
+		var (
+			typ   string
+			stat  string
+			disp  sql.NullString
+			verif sql.NullTime
+		)
 
-	if err := row.Scan(
-		&c.ID,
-		&typ,
-		&stat,
-		&c.Value,
-		&disp,
-		&verif,
-		&c.CreatedAt,
-		&c.UpdatedAt,
-	); err != nil {
-		return domain.Contact{}, err
-	}
-	c.Type = domain.ContactType(typ)
-	c.Status = domain.ContactStatus(stat)
-	if disp.Valid {
-		c.DisplayName = &disp.String
-	}
-	c.Telegram = &domain.TelegramContactConfig{Username: username}
-	if verif.Valid {
-		t := verif.Time
-		c.VerifiedAt = &t
-	}
+		if err := row.Scan(
+			&c.ID,
+			&typ,
+			&stat,
+			&c.Value,
+			&disp,
+			&verif,
+			&c.CreatedAt,
+			&c.UpdatedAt,
+		); err != nil {
+			return err
+		}
+		c.Type = domain.ContactType(typ)
+		c.Status = domain.ContactStatus(stat)
+		if disp.Valid {
+			c.DisplayName = &disp.String
+		}
+		c.Telegram = &domain.TelegramContactConfig{Username: username}
+		if verif.Valid {
+			t := verif.Time
+			c.VerifiedAt = &t
+		}
 
-	if username != nil {
-		_, err = tx.ExecContext(ctx, `
+		if username != nil {
+			_, err := tx.ExecContext(ctx, `
 			INSERT INTO contact_telegram_config (contact_id, username)
 			VALUES ($1, $2)
 			ON CONFLICT (contact_id) DO UPDATE SET username = EXCLUDED.username
 		`, c.ID, *username)
-		if err != nil {
-			return domain.Contact{}, err
+			if err != nil {
+				return err
+			}
 		}
-	}
-
-	if err := tx.Commit(); err != nil {
+		return nil
+	})
+	if err != nil {
 		return domain.Contact{}, err
 	}
 	return c, nil
@@ -107,18 +107,13 @@ func (r *ContactsRepository) CreateTelegram(
 	status domain.ContactStatus,
 	verifiedAt *time.Time,
 ) (domain.Contact, error) {
-	tx, err := r.db.BeginTx(ctx, nil)
+	var contact domain.Contact
+	err := r.withTx(ctx, func(tx *sql.Tx) error {
+		var err error
+		contact, err = upsertTelegramContact(ctx, tx, "", chatID, username, displayName, status, verifiedAt)
+		return err
+	})
 	if err != nil {
-		return domain.Contact{}, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	contact, err := upsertTelegramContact(ctx, tx, "", chatID, username, displayName, status, verifiedAt)
-	if err != nil {
-		return domain.Contact{}, err
-	}
-
-	if err := tx.Commit(); err != nil {
 		return domain.Contact{}, err
 	}
 	return contact, nil
@@ -133,18 +128,13 @@ func (r *ContactsRepository) UpdateTelegram(
 	status domain.ContactStatus,
 	verifiedAt *time.Time,
 ) (domain.Contact, error) {
-	tx, err := r.db.BeginTx(ctx, nil)
+	var contact domain.Contact
+	err := r.withTx(ctx, func(tx *sql.Tx) error {
+		var err error
+		contact, err = upsertTelegramContact(ctx, tx, contactID, chatID, username, displayName, status, verifiedAt)
+		return err
+	})
 	if err != nil {
-		return domain.Contact{}, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	contact, err := upsertTelegramContact(ctx, tx, contactID, chatID, username, displayName, status, verifiedAt)
-	if err != nil {
-		return domain.Contact{}, err
-	}
-
-	if err := tx.Commit(); err != nil {
 		return domain.Contact{}, err
 	}
 	return contact, nil
@@ -205,27 +195,22 @@ func (r *ContactsRepository) createOrUpdateEmail(
 	cfg domain.EmailContactConfig,
 	verifiedAt *time.Time,
 ) (domain.Contact, error) {
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return domain.Contact{}, err
-	}
-	defer func() { _ = tx.Rollback() }()
+	var contact domain.Contact
+	err := r.withTx(ctx, func(tx *sql.Tx) error {
+		var err error
+		contact, err = upsertEmailContact(ctx, tx, contactID, value, displayName, status, verifiedAt)
+		if err != nil {
+			return err
+		}
 
-	contact, err := upsertEmailContact(ctx, tx, contactID, value, displayName, status, verifiedAt)
-	if err != nil {
-		return domain.Contact{}, err
-	}
-
-	_, err = tx.ExecContext(ctx, `
+		_, err = tx.ExecContext(ctx, `
 		INSERT INTO contact_email_config (contact_id, format)
 		VALUES ($1, $2)
 		ON CONFLICT (contact_id) DO UPDATE SET format = EXCLUDED.format
 	`, contact.ID, cfg.Format)
+		return err
+	})
 	if err != nil {
-		return domain.Contact{}, err
-	}
-
-	if err := tx.Commit(); err != nil {
 		return domain.Contact{}, err
 	}
 
@@ -242,23 +227,20 @@ func (r *ContactsRepository) createOrUpdateHTTP(
 	cfg domain.HTTPContactConfig,
 	verifiedAt *time.Time,
 ) (domain.Contact, error) {
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return domain.Contact{}, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	contact, err := upsertHTTPContact(ctx, tx, contactID, value, displayName, status, verifiedAt)
-	if err != nil {
-		return domain.Contact{}, err
-	}
-
 	headersJSON, err := json.Marshal(cfg.Headers)
 	if err != nil {
 		return domain.Contact{}, err
 	}
 
-	_, err = tx.ExecContext(ctx, `
+	var contact domain.Contact
+	err = r.withTx(ctx, func(tx *sql.Tx) error {
+		var err error
+		contact, err = upsertHTTPContact(ctx, tx, contactID, value, displayName, status, verifiedAt)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.ExecContext(ctx, `
 		INSERT INTO contact_http_config (contact_id, method, url, headers_json, body_template)
 		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (contact_id) DO UPDATE SET
@@ -266,12 +248,10 @@ func (r *ContactsRepository) createOrUpdateHTTP(
 			url = EXCLUDED.url,
 			headers_json = EXCLUDED.headers_json,
 			body_template = EXCLUDED.body_template
-	`, contact.ID, cfg.Method, cfg.URL, string(headersJSON), cfg.BodyTemplate)
+		`, contact.ID, cfg.Method, cfg.URL, string(headersJSON), cfg.BodyTemplate)
+		return err
+	})
 	if err != nil {
-		return domain.Contact{}, err
-	}
-
-	if err := tx.Commit(); err != nil {
 		return domain.Contact{}, err
 	}
 
@@ -285,7 +265,7 @@ func (r *ContactsRepository) createOrUpdateHTTP(
 }
 
 func (r *ContactsRepository) GetEmailConfig(ctx context.Context, contactID string) (domain.EmailContactConfig, error) {
-	row := r.db.QueryRowContext(ctx, `
+	row := r.exec.QueryRowContext(ctx, `
 		SELECT format
 		FROM contact_email_config
 		WHERE contact_id = $1
@@ -304,7 +284,7 @@ func (r *ContactsRepository) GetEmailConfig(ctx context.Context, contactID strin
 }
 
 func (r *ContactsRepository) GetHTTPConfig(ctx context.Context, contactID string) (domain.HTTPContactConfig, error) {
-	row := r.db.QueryRowContext(ctx, `
+	row := r.exec.QueryRowContext(ctx, `
 		SELECT method, url, headers_json, body_template
 		FROM contact_http_config
 		WHERE contact_id = $1
@@ -366,7 +346,7 @@ LIMIT $1 OFFSET $2
 	}
 
 	var total int
-	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM contacts`).Scan(&total); err != nil {
+	if err := r.exec.QueryRowContext(ctx, `SELECT COUNT(*) FROM contacts`).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
@@ -393,7 +373,7 @@ func (r *ContactsRepository) GetByTypeValue(ctx context.Context, typ domain.Cont
 }
 
 func (r *ContactsRepository) Delete(ctx context.Context, id string) error {
-	res, err := r.db.ExecContext(ctx, `DELETE FROM contacts WHERE id = $1`, id)
+	res, err := r.exec.ExecContext(ctx, `DELETE FROM contacts WHERE id = $1`, id)
 	if err != nil {
 		return err
 	}
@@ -408,7 +388,7 @@ func (r *ContactsRepository) Delete(ctx context.Context, id string) error {
 }
 
 func (r *ContactsRepository) listByQuery(ctx context.Context, q string, args ...any) ([]domain.Contact, int, error) {
-	rows, err := r.db.QueryContext(ctx, q, args...)
+	rows, err := r.exec.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -495,6 +475,21 @@ func scanContact(scanner interface {
 	}
 
 	return c, nil
+}
+
+func (r *ContactsRepository) withTx(ctx context.Context, fn func(*sql.Tx) error) error {
+	if tx, ok := r.exec.(*sql.Tx); ok {
+		return fn(tx)
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func cloneHeaders(in map[string]string) map[string]string {

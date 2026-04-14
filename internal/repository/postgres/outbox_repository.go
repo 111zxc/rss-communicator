@@ -9,9 +9,13 @@ import (
 	"github.com/111zxc/rss-communicator/internal/repository"
 )
 
-type OutboxRepository struct{ db *sql.DB }
+type OutboxRepository struct {
+	db   *sql.DB
+	exec dbtx
+}
 
-func NewOutboxRepository(db *sql.DB) *OutboxRepository { return &OutboxRepository{db: db} }
+func NewOutboxRepository(db *sql.DB) *OutboxRepository   { return &OutboxRepository{db: db, exec: db} }
+func NewOutboxRepositoryTx(tx *sql.Tx) *OutboxRepository { return &OutboxRepository{exec: tx} }
 
 func (r *OutboxRepository) Enqueue(ctx context.Context, topic string, payload any, availableAt time.Time) error {
 	body, err := json.Marshal(payload)
@@ -19,7 +23,7 @@ func (r *OutboxRepository) Enqueue(ctx context.Context, topic string, payload an
 		return err
 	}
 
-	_, err = r.db.ExecContext(ctx, `
+	_, err = r.exec.ExecContext(ctx, `
 		INSERT INTO outbox (topic, payload, available_at)
 		VALUES ($1, $2::jsonb, $3)
 	`, topic, string(body), availableAt)
@@ -27,7 +31,7 @@ func (r *OutboxRepository) Enqueue(ctx context.Context, topic string, payload an
 }
 
 func (r *OutboxRepository) ClaimBatch(ctx context.Context, now time.Time, leaseUntil time.Time, limit int) ([]repository.OutboxMessage, error) {
-	rows, err := r.db.QueryContext(ctx, `
+	rows, err := r.exec.QueryContext(ctx, `
 		WITH claimed AS (
 			SELECT id
 			FROM outbox
@@ -62,7 +66,7 @@ func (r *OutboxRepository) ClaimBatch(ctx context.Context, now time.Time, leaseU
 }
 
 func (r *OutboxRepository) MarkPublished(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, `
+	_, err := r.exec.ExecContext(ctx, `
 		UPDATE outbox
 		SET status='published', last_error=NULL, updated_at=now()
 		WHERE id=$1
@@ -71,7 +75,7 @@ func (r *OutboxRepository) MarkPublished(ctx context.Context, id string) error {
 }
 
 func (r *OutboxRepository) MarkFailed(ctx context.Context, id string, errMsg string, nextAvailableAt time.Time) error {
-	_, err := r.db.ExecContext(ctx, `
+	_, err := r.exec.ExecContext(ctx, `
 		UPDATE outbox
 		SET status='failed', attempt_count=attempt_count+1, last_error=$2, available_at=$3, updated_at=now()
 		WHERE id=$1

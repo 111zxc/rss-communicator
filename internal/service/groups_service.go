@@ -15,10 +15,15 @@ type GroupService struct {
 	feeds         repository.FeedsRepository
 	contacts      repository.ContactsRepository
 	subscriptions repository.SubscriptionsRepository
+	txRunner      repository.Database
 }
 
-func NewGroupService(groups repository.GroupsRepository, feeds repository.FeedsRepository, contacts repository.ContactsRepository, subscriptions repository.SubscriptionsRepository) *GroupService {
-	return &GroupService{groups: groups, feeds: feeds, contacts: contacts, subscriptions: subscriptions}
+func NewGroupService(groups repository.GroupsRepository, feeds repository.FeedsRepository, contacts repository.ContactsRepository, subscriptions repository.SubscriptionsRepository, txRunner ...repository.Database) *GroupService {
+	var db repository.Database
+	if len(txRunner) > 0 {
+		db = txRunner[0]
+	}
+	return &GroupService{groups: groups, feeds: feeds, contacts: contacts, subscriptions: subscriptions, txRunner: db}
 }
 
 type GroupInput struct {
@@ -105,29 +110,33 @@ func (s *GroupService) AddContact(ctx context.Context, groupID, contactID string
 		}
 		return err
 	}
-	if err := s.groups.AddContact(ctx, groupID, contactID); err != nil {
-		return err
-	}
-	feedIDs, err := s.groups.ListFeedIDs(ctx, groupID)
-	if err != nil {
-		return err
-	}
-	for _, feedID := range feedIDs {
-		if err := s.subscriptions.AddGroup(ctx, feedID, contactID, groupID); err != nil {
+	return s.withRepos(ctx, func(groups repository.GroupsRepository, feeds repository.FeedsRepository, contacts repository.ContactsRepository, subscriptions repository.SubscriptionsRepository) error {
+		if err := groups.AddContact(ctx, groupID, contactID); err != nil {
 			return err
 		}
-	}
-	return nil
+		feedIDs, err := groups.ListFeedIDs(ctx, groupID)
+		if err != nil {
+			return err
+		}
+		for _, feedID := range feedIDs {
+			if err := subscriptions.AddGroup(ctx, feedID, contactID, groupID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (s *GroupService) RemoveContact(ctx context.Context, groupID, contactID string) error {
 	if strings.TrimSpace(groupID) == "" || strings.TrimSpace(contactID) == "" {
 		return ErrBadRequest
 	}
-	if err := s.groups.RemoveContact(ctx, groupID, contactID); err != nil {
-		return err
-	}
-	return s.subscriptions.RemoveGroupByContact(ctx, groupID, contactID)
+	return s.withRepos(ctx, func(groups repository.GroupsRepository, feeds repository.FeedsRepository, contacts repository.ContactsRepository, subscriptions repository.SubscriptionsRepository) error {
+		if err := groups.RemoveContact(ctx, groupID, contactID); err != nil {
+			return err
+		}
+		return subscriptions.RemoveGroupByContact(ctx, groupID, contactID)
+	})
 }
 
 func (s *GroupService) ListFeeds(ctx context.Context, groupID string) ([]domain.Feed, error) {
@@ -159,27 +168,40 @@ func (s *GroupService) AddFeed(ctx context.Context, groupID, feedID string) erro
 		}
 		return err
 	}
-	if err := s.groups.AddFeed(ctx, groupID, feedID); err != nil {
-		return err
-	}
-	contactIDs, err := s.groups.ListContactIDs(ctx, groupID)
-	if err != nil {
-		return err
-	}
-	for _, contactID := range contactIDs {
-		if err := s.subscriptions.AddGroup(ctx, feedID, contactID, groupID); err != nil {
+	return s.withRepos(ctx, func(groups repository.GroupsRepository, feeds repository.FeedsRepository, contacts repository.ContactsRepository, subscriptions repository.SubscriptionsRepository) error {
+		if err := groups.AddFeed(ctx, groupID, feedID); err != nil {
 			return err
 		}
-	}
-	return nil
+		contactIDs, err := groups.ListContactIDs(ctx, groupID)
+		if err != nil {
+			return err
+		}
+		for _, contactID := range contactIDs {
+			if err := subscriptions.AddGroup(ctx, feedID, contactID, groupID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (s *GroupService) RemoveFeed(ctx context.Context, groupID, feedID string) error {
 	if strings.TrimSpace(groupID) == "" || strings.TrimSpace(feedID) == "" {
 		return ErrBadRequest
 	}
-	if err := s.groups.RemoveFeed(ctx, groupID, feedID); err != nil {
-		return err
+	return s.withRepos(ctx, func(groups repository.GroupsRepository, feeds repository.FeedsRepository, contacts repository.ContactsRepository, subscriptions repository.SubscriptionsRepository) error {
+		if err := groups.RemoveFeed(ctx, groupID, feedID); err != nil {
+			return err
+		}
+		return subscriptions.RemoveGroupByFeed(ctx, groupID, feedID)
+	})
+}
+
+func (s *GroupService) withRepos(ctx context.Context, fn func(repository.GroupsRepository, repository.FeedsRepository, repository.ContactsRepository, repository.SubscriptionsRepository) error) error {
+	if s.txRunner == nil {
+		return fn(s.groups, s.feeds, s.contacts, s.subscriptions)
 	}
-	return s.subscriptions.RemoveGroupByFeed(ctx, groupID, feedID)
+	return s.txRunner.WithinTx(ctx, func(store repository.Store) error {
+		return fn(store.Groups(), store.Feeds(), store.Contacts(), store.Subscriptions())
+	})
 }

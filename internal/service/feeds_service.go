@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"net/url"
 	"strings"
@@ -84,7 +85,11 @@ func (s *FeedService) Delete(ctx context.Context, feedID string) error {
 	if strings.TrimSpace(feedID) == "" {
 		return ErrBadRequest
 	}
-	return s.feeds.Delete(ctx, feedID)
+	err := s.feeds.Delete(ctx, feedID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	return err
 }
 
 func (s *FeedService) Update(ctx context.Context, feedID string, in UpdateFeedInput) (domain.Feed, error) {
@@ -94,6 +99,9 @@ func (s *FeedService) Update(ctx context.Context, feedID string, in UpdateFeedIn
 
 	f, err := s.feeds.GetByID(ctx, feedID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.Feed{}, ErrNotFound
+		}
 		return domain.Feed{}, err
 	}
 
@@ -107,7 +115,11 @@ func (s *FeedService) Update(ctx context.Context, feedID string, in UpdateFeedIn
 		return domain.Feed{}, ErrBadRequest
 	}
 
-	return s.feeds.UpdateBatching(ctx, feedID, f.BatchEnabled, f.BatchWindowSecs)
+	updated, err := s.feeds.UpdateBatching(ctx, feedID, f.BatchEnabled, f.BatchWindowSecs)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Feed{}, ErrNotFound
+	}
+	return updated, err
 }
 
 type SystemClock struct{}

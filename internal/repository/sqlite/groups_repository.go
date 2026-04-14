@@ -7,9 +7,10 @@ import (
 	"github.com/111zxc/rss-communicator/internal/domain"
 )
 
-type GroupsRepository struct{ db *sql.DB }
+type GroupsRepository struct{ db dbtx }
 
-func NewGroupsRepository(db *sql.DB) *GroupsRepository { return &GroupsRepository{db: db} }
+func NewGroupsRepository(db *sql.DB) *GroupsRepository   { return &GroupsRepository{db: db} }
+func NewGroupsRepositoryTx(tx *sql.Tx) *GroupsRepository { return &GroupsRepository{db: tx} }
 
 func (r *GroupsRepository) Create(ctx context.Context, g domain.Group) (domain.Group, error) {
 	row := r.db.QueryRowContext(ctx, `

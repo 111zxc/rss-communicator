@@ -436,6 +436,10 @@ func (r *handlerFeedRepoStub) ListDue(context.Context, time.Time, int) ([]domain
 	return nil, nil
 }
 
+func (r *handlerFeedRepoStub) ClaimDue(context.Context, time.Time, time.Time, int) ([]domain.Feed, error) {
+	return nil, nil
+}
+
 func (r *handlerFeedRepoStub) MarkFetched(context.Context, string, time.Time, time.Time, *string, *string) error {
 	return nil
 }

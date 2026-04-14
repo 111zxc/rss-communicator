@@ -40,7 +40,7 @@ func RunTGBot(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	}
 	api.Debug = false
 
-	regSvc := service.NewRegistrationService(db.Contacts(), db.RegistrationCodes(), db.Groups(), db.Subscriptions())
+	regSvc := service.NewRegistrationService(db.Contacts(), db.RegistrationCodes(), db.Groups(), db.Subscriptions(), db)
 	b := telegram.New(api, db, regSvc, log)
 
 	log.Info("tg-bot started")

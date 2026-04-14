@@ -8,10 +8,14 @@ import (
 	"github.com/111zxc/rss-communicator/internal/domain"
 )
 
-type RegistrationCodesRepository struct{ db *sql.DB }
+type RegistrationCodesRepository struct{ db dbtx }
 
 func NewRegistrationCodesRepository(db *sql.DB) *RegistrationCodesRepository {
 	return &RegistrationCodesRepository{db: db}
+}
+
+func NewRegistrationCodesRepositoryTx(tx *sql.Tx) *RegistrationCodesRepository {
+	return &RegistrationCodesRepository{db: tx}
 }
 
 func (r *RegistrationCodesRepository) Create(ctx context.Context, code domain.RegistrationCode) (domain.RegistrationCode, error) {

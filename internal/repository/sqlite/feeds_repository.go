@@ -3,15 +3,15 @@ package sqlite
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"time"
 
 	"github.com/111zxc/rss-communicator/internal/domain"
 )
 
-type FeedsRepository struct{ db *sql.DB }
+type FeedsRepository struct{ db dbtx }
 
-func NewFeedsRepository(db *sql.DB) *FeedsRepository { return &FeedsRepository{db: db} }
+func NewFeedsRepository(db *sql.DB) *FeedsRepository   { return &FeedsRepository{db: db} }
+func NewFeedsRepositoryTx(tx *sql.Tx) *FeedsRepository { return &FeedsRepository{db: tx} }
 
 func (r *FeedsRepository) ListDue(ctx context.Context, now time.Time, limit int) ([]domain.Feed, error) {
 	rows, err := r.db.QueryContext(ctx, `
@@ -57,6 +57,27 @@ func (r *FeedsRepository) ListDue(ctx context.Context, now time.Time, limit int)
 		out = append(out, f)
 	}
 	return out, rows.Err()
+}
+
+func (r *FeedsRepository) ClaimDue(ctx context.Context, now time.Time, nextAt time.Time, limit int) ([]domain.Feed, error) {
+	tx, ok := r.db.(*sql.Tx)
+	if !ok {
+		var err error
+		tx, err = r.beginClaimTx(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = tx.Rollback() }()
+		feeds, err := claimDueSQLite(ctx, tx, now, nextAt, limit)
+		if err != nil {
+			return nil, err
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+		return feeds, nil
+	}
+	return claimDueSQLite(ctx, tx, now, nextAt, limit)
 }
 
 func (r *FeedsRepository) MarkFetched(ctx context.Context, feedID string, fetchedAt, nextAt time.Time, etag, lastModified *string) error {
@@ -230,7 +251,7 @@ func (r *FeedsRepository) Delete(ctx context.Context, feedID string) error {
 	}
 
 	if affected == 0 {
-		return errors.New("feed not found")
+		return sql.ErrNoRows
 	}
 
 	return nil
@@ -292,6 +313,76 @@ func (r *FeedsRepository) Create(ctx context.Context, f domain.Feed) (domain.Fee
 	if initAt.Valid {
 		t := initAt.Time
 		out.InitializedAt = &t
+	}
+
+	return out, nil
+}
+
+func (r *FeedsRepository) beginClaimTx(ctx context.Context) (*sql.Tx, error) {
+	beginner, ok := r.db.(*sql.DB)
+	if !ok {
+		return nil, sql.ErrConnDone
+	}
+	return beginner.BeginTx(ctx, nil)
+}
+
+func claimDueSQLite(ctx context.Context, tx *sql.Tx, now time.Time, nextAt time.Time, limit int) ([]domain.Feed, error) {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id, url, name, enabled, interval_seconds, batch_enabled, batch_window_seconds, etag, last_modified, last_fetch_at, next_fetch_at, initialized_at
+		FROM feeds
+		WHERE enabled = true AND (next_fetch_at IS NULL OR next_fetch_at <= $1)
+		ORDER BY COALESCE(next_fetch_at, '1970-01-01T00:00:00Z') ASC
+		LIMIT $2
+	`, now, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.Feed
+	for rows.Next() {
+		var f domain.Feed
+		var etag, lm sql.NullString
+		var lastFetch, nextFetch, initAt sql.NullTime
+
+		if err := rows.Scan(&f.ID, &f.URL, &f.Name, &f.Enabled, &f.IntervalSeconds, &f.BatchEnabled, &f.BatchWindowSecs, &etag, &lm, &lastFetch, &nextFetch, &initAt); err != nil {
+			return nil, err
+		}
+		if etag.Valid {
+			f.ETag = &etag.String
+		}
+		if lm.Valid {
+			f.LastModified = &lm.String
+		}
+		if lastFetch.Valid {
+			t := lastFetch.Time
+			f.LastFetchAt = &t
+		}
+		if nextFetch.Valid {
+			t := nextFetch.Time
+			f.NextFetchAt = &t
+		}
+		if initAt.Valid {
+			t := initAt.Time
+			f.InitializedAt = &t
+		}
+
+		out = append(out, f)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for i := range out {
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE feeds
+			SET next_fetch_at=$2, updated_at=CURRENT_TIMESTAMP
+			WHERE id=$1
+		`, out[i].ID, nextAt); err != nil {
+			return nil, err
+		}
+		t := nextAt
+		out[i].NextFetchAt = &t
 	}
 
 	return out, nil

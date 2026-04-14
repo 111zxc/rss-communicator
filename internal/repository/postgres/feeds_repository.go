@@ -3,15 +3,15 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"time"
 
 	"github.com/111zxc/rss-communicator/internal/domain"
 )
 
-type FeedsRepository struct{ db *sql.DB }
+type FeedsRepository struct{ db dbtx }
 
-func NewFeedsRepository(db *sql.DB) *FeedsRepository { return &FeedsRepository{db: db} }
+func NewFeedsRepository(db *sql.DB) *FeedsRepository   { return &FeedsRepository{db: db} }
+func NewFeedsRepositoryTx(tx *sql.Tx) *FeedsRepository { return &FeedsRepository{db: tx} }
 
 func (r *FeedsRepository) ListDue(ctx context.Context, now time.Time, limit int) ([]domain.Feed, error) {
 	rows, err := r.db.QueryContext(ctx, `
@@ -21,6 +21,61 @@ func (r *FeedsRepository) ListDue(ctx context.Context, now time.Time, limit int)
 		ORDER BY COALESCE(next_fetch_at, to_timestamp(0)) ASC
 		LIMIT $2
 	`, now, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.Feed
+	for rows.Next() {
+		var f domain.Feed
+		var etag, lm sql.NullString
+		var lastFetch, nextFetch, initAt sql.NullTime
+
+		if err := rows.Scan(&f.ID, &f.URL, &f.Name, &f.Enabled, &f.IntervalSeconds, &f.BatchEnabled, &f.BatchWindowSecs, &etag, &lm, &lastFetch, &nextFetch, &initAt); err != nil {
+			return nil, err
+		}
+		if etag.Valid {
+			f.ETag = &etag.String
+		}
+		if lm.Valid {
+			f.LastModified = &lm.String
+		}
+		if lastFetch.Valid {
+			t := lastFetch.Time
+			f.LastFetchAt = &t
+		}
+		if nextFetch.Valid {
+			t := nextFetch.Time
+			f.NextFetchAt = &t
+		}
+		if initAt.Valid {
+			t := initAt.Time
+			f.InitializedAt = &t
+		}
+
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+func (r *FeedsRepository) ClaimDue(ctx context.Context, now time.Time, nextAt time.Time, limit int) ([]domain.Feed, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		WITH due AS (
+			SELECT id
+			FROM feeds
+			WHERE enabled = true AND (next_fetch_at IS NULL OR next_fetch_at <= $1)
+			ORDER BY COALESCE(next_fetch_at, to_timestamp(0)) ASC
+			LIMIT $2
+			FOR UPDATE SKIP LOCKED
+		)
+		UPDATE feeds f
+		SET next_fetch_at = $3, updated_at = now()
+		FROM due
+		WHERE f.id = due.id
+		RETURNING f.id, f.url, f.name, f.enabled, f.interval_seconds, f.batch_enabled, f.batch_window_seconds,
+		          f.etag, f.last_modified, f.last_fetch_at, f.next_fetch_at, f.initialized_at
+	`, now, limit, nextAt)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +285,7 @@ func (r *FeedsRepository) Delete(ctx context.Context, feedID string) error {
 	}
 
 	if affected == 0 {
-		return errors.New("feed not found")
+		return sql.ErrNoRows
 	}
 
 	return nil

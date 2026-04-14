@@ -142,6 +142,10 @@ func (f *feedLookupStub) ListDue(context.Context, time.Time, int) ([]domain.Feed
 	return nil, nil
 }
 
+func (f *feedLookupStub) ClaimDue(context.Context, time.Time, time.Time, int) ([]domain.Feed, error) {
+	return nil, nil
+}
+
 func (f *feedLookupStub) MarkFetched(context.Context, string, time.Time, time.Time, *string, *string) error {
 	return nil
 }
