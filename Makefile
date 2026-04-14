@@ -2,10 +2,16 @@ APP_NAME := rss-communicator
 RSSD_BIN := bin/rssd
 TGBOT_BIN := bin/tg-bot
 
+DB_DRIVER ?= postgres
 DB_DSN ?= postgres://rss:rss@localhost:5432/rss?sslmode=disable
-MIGRATIONS_DIR := ./migrations
+MIGRATIONS_DIR := ./migrations/$(DB_DRIVER)
+GOOSE_DRIVER := $(DB_DRIVER)
 
-.PHONY: help deps fmt lint test build build-rssd build-tg run-rssd run-tg db-up db-down migrate-up migrate-down compose-up compose-down
+ifeq ($(DB_DRIVER),sqlite)
+GOOSE_DRIVER := sqlite3
+endif
+
+.PHONY: help deps fmt lint test build build-rssd build-tg run-rssd run-tg db-up db-down migrate-up migrate-down migrate-up-postgres migrate-down-postgres migrate-up-sqlite migrate-down-sqlite compose-up compose-down
 
 help:
 	@echo "Targets:"
@@ -17,8 +23,12 @@ help:
 	@echo "  run-tg         - run tg-bot locally"
 	@echo "  compose-up     - docker compose up -d"
 	@echo "  compose-down   - docker compose down"
-	@echo "  migrate-up     - goose up"
-	@echo "  migrate-down   - goose down (1 step)"
+	@echo "  migrate-up     - goose up for DB_DRIVER=$(DB_DRIVER)"
+	@echo "  migrate-down   - goose down (1 step) for DB_DRIVER=$(DB_DRIVER)"
+	@echo "  migrate-up-postgres   - goose up for postgres"
+	@echo "  migrate-down-postgres - goose down for postgres"
+	@echo "  migrate-up-sqlite     - goose up for sqlite"
+	@echo "  migrate-down-sqlite   - goose down for sqlite"
 
 deps:
 	go mod tidy
@@ -40,10 +50,10 @@ build-tg:
 	CGO_ENABLED=0 go build -o $(TGBOT_BIN) ./cmd/tg-bot
 
 run-rssd:
-	DB_DSN=$(DB_DSN) go run ./cmd/rssd
+	DB_DRIVER=$(DB_DRIVER) DB_DSN=$(DB_DSN) go run ./cmd/rssd
 
 run-tg:
-	DB_DSN=$(DB_DSN) go run ./cmd/tg-bot
+	DB_DRIVER=$(DB_DRIVER) DB_DSN=$(DB_DSN) go run ./cmd/tg-bot
 
 compose-up:
 	docker compose up -d --build
@@ -57,7 +67,19 @@ db-down:
 	docker compose down -v
 
 migrate-up:
-	goose -dir $(MIGRATIONS_DIR) postgres "$(DB_DSN)" up
+	goose -dir $(MIGRATIONS_DIR) $(GOOSE_DRIVER) "$(DB_DSN)" up
 
 migrate-down:
-	goose -dir $(MIGRATIONS_DIR) postgres "$(DB_DSN)" down
+	goose -dir $(MIGRATIONS_DIR) $(GOOSE_DRIVER) "$(DB_DSN)" down
+
+migrate-up-postgres:
+	$(MAKE) migrate-up DB_DRIVER=postgres DB_DSN=$(DB_DSN)
+
+migrate-down-postgres:
+	$(MAKE) migrate-down DB_DRIVER=postgres DB_DSN=$(DB_DSN)
+
+migrate-up-sqlite:
+	$(MAKE) migrate-up DB_DRIVER=sqlite DB_DSN=$(DB_DSN)
+
+migrate-down-sqlite:
+	$(MAKE) migrate-down DB_DRIVER=sqlite DB_DSN=$(DB_DSN)

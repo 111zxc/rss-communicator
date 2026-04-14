@@ -6,19 +6,19 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/111zxc/rss-communicator/internal/repository/postgres"
+	"github.com/111zxc/rss-communicator/internal/repository"
 	"github.com/111zxc/rss-communicator/internal/runtime/queue"
 )
 
 type Scheduler struct {
-	db    *postgres.DB
+	db    repository.Store
 	q     queue.Queue
 	log   *slog.Logger
 	tick  time.Duration
 	limit int
 }
 
-func NewScheduler(db *postgres.DB, q queue.Queue, log *slog.Logger, tick time.Duration, limit int) *Scheduler {
+func NewScheduler(db repository.Store, q queue.Queue, log *slog.Logger, tick time.Duration, limit int) *Scheduler {
 	return &Scheduler{db: db, q: q, log: log, tick: tick, limit: limit}
 }
 

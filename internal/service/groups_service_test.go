@@ -85,6 +85,9 @@ func (s *feedsRepoStubForGroups) MarkFetched(context.Context, string, time.Time,
 	return nil
 }
 func (s *feedsRepoStubForGroups) MarkFetchError(context.Context, string, string) error { return nil }
+func (s *feedsRepoStubForGroups) MarkInitialized(context.Context, string, time.Time) error {
+	return nil
+}
 func (s *feedsRepoStubForGroups) GetByID(context.Context, string) (domain.Feed, error) {
 	return s.feed, nil
 }

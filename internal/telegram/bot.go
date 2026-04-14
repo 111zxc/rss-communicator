@@ -8,18 +8,18 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
-	"github.com/111zxc/rss-communicator/internal/repository/postgres"
+	"github.com/111zxc/rss-communicator/internal/repository"
 	"github.com/111zxc/rss-communicator/internal/service"
 )
 
 type Bot struct {
 	api *tgbotapi.BotAPI
-	db  *postgres.DB
+	db  repository.Store
 	reg *service.RegistrationService
 	log *slog.Logger
 }
 
-func New(api *tgbotapi.BotAPI, db *postgres.DB, reg *service.RegistrationService, log *slog.Logger) *Bot {
+func New(api *tgbotapi.BotAPI, db repository.Store, reg *service.RegistrationService, log *slog.Logger) *Bot {
 	return &Bot{api: api, db: db, reg: reg, log: log}
 }
 

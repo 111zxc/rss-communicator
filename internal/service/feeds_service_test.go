@@ -160,6 +160,10 @@ func (r *feedRepoStub) MarkFetchError(context.Context, string, string) error {
 	return nil
 }
 
+func (r *feedRepoStub) MarkInitialized(context.Context, string, time.Time) error {
+	return nil
+}
+
 func (r *feedRepoStub) GetByID(context.Context, string) (domain.Feed, error) {
 	return r.getByIDFeed, nil
 }

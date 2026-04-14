@@ -7,19 +7,19 @@ import (
 	"time"
 
 	"github.com/111zxc/rss-communicator/internal/domain"
-	"github.com/111zxc/rss-communicator/internal/repository/postgres"
+	"github.com/111zxc/rss-communicator/internal/repository"
 	"github.com/111zxc/rss-communicator/internal/rss"
 	"github.com/111zxc/rss-communicator/internal/runtime/queue"
 )
 
 type FetchWorker struct {
-	db      *postgres.DB
+	db      repository.Store
 	q       queue.Queue
 	log     *slog.Logger
 	fetcher *rss.Fetcher
 }
 
-func NewFetchWorker(db *postgres.DB, q queue.Queue, log *slog.Logger, fetcher *rss.Fetcher) *FetchWorker {
+func NewFetchWorker(db repository.Store, q queue.Queue, log *slog.Logger, fetcher *rss.Fetcher) *FetchWorker {
 	return &FetchWorker{db: db, q: q, log: log, fetcher: fetcher}
 }
 

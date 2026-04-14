@@ -150,6 +150,10 @@ func (f *feedLookupStub) MarkFetchError(context.Context, string, string) error {
 	return nil
 }
 
+func (f *feedLookupStub) MarkInitialized(context.Context, string, time.Time) error {
+	return nil
+}
+
 func (f *feedLookupStub) GetByID(context.Context, string) (domain.Feed, error) {
 	if f.err != nil {
 		return domain.Feed{}, f.err

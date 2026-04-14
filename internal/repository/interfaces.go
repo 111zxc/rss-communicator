@@ -14,7 +14,6 @@ type Tx interface {
 
 type Store interface {
 	Ping(ctx context.Context) error
-	BeginTx(ctx context.Context) (Tx, error)
 
 	Feeds() FeedsRepository
 	Contacts() ContactsRepository
@@ -26,11 +25,17 @@ type Store interface {
 	Outbox() OutboxRepository
 }
 
+type Database interface {
+	Store
+	Close() error
+}
+
 type FeedsRepository interface {
 	Create(ctx context.Context, f domain.Feed) (domain.Feed, error)
 	ListDue(ctx context.Context, now time.Time, limit int) ([]domain.Feed, error)
 	MarkFetched(ctx context.Context, feedID string, fetchedAt time.Time, nextAt time.Time, etag, lastModified *string) error
 	MarkFetchError(ctx context.Context, feedID string, errMsg string) error
+	MarkInitialized(ctx context.Context, feedID string, at time.Time) error
 	GetByID(ctx context.Context, feedID string) (domain.Feed, error)
 	UpdateBatching(ctx context.Context, feedID string, batchEnabled bool, batchWindowSecs int) (domain.Feed, error)
 	List(ctx context.Context, limit, offset int) ([]domain.Feed, int, error)
@@ -98,8 +103,12 @@ type ItemsRepo interface {
 
 type DeliveriesRepository interface {
 	CreatePendingIfNotExists(ctx context.Context, contactID, itemID string, availableAt time.Time) (created bool, deliveryID string, err error)
+	ClaimBatch(ctx context.Context, deliveryID string, now time.Time) (domain.Contact, domain.Feed, []domain.DeliveryWithItem, error)
 	MarkSent(ctx context.Context, deliveryID string, sentAt time.Time) error
+	MarkManySent(ctx context.Context, deliveryIDs []string, sentAt time.Time) error
 	MarkFailed(ctx context.Context, deliveryID string, errMsg string, nextRetryAt *time.Time) error
+	MarkManyFailed(ctx context.Context, deliveryIDs []string, errMsg string, nextRetryAt *time.Time) error
+	ListRetryDue(ctx context.Context, now time.Time, limit int, maxAttempts int) ([]string, error)
 }
 
 type OutboxRepository interface {

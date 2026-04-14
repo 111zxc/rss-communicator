@@ -8,7 +8,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
 	"github.com/111zxc/rss-communicator/internal/config"
-	"github.com/111zxc/rss-communicator/internal/repository/postgres"
+	"github.com/111zxc/rss-communicator/internal/database"
 	"github.com/111zxc/rss-communicator/internal/service"
 	"github.com/111zxc/rss-communicator/internal/telegram"
 )
@@ -19,7 +19,7 @@ func RunTGBot(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		return context.Canceled
 	}
 
-	db, err := postgres.New(cfg.DB.DSN)
+	db, err := database.Open(cfg.DB.Driver, cfg.DB.DSN)
 	if err != nil {
 		log.Error("db connect failed", "err", err)
 		return err

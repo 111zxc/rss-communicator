@@ -50,7 +50,10 @@ type EmailConfig struct {
 }
 
 type Config struct {
-	DB       struct{ DSN string }
+	DB struct {
+		Driver string
+		DSN    string
+	}
 	Telegram struct{ BotToken string }
 	Email    EmailConfig
 	Log      struct {
@@ -65,6 +68,7 @@ type Config struct {
 
 func MustLoad() Config {
 	var cfg Config
+	cfg.DB.Driver = Getenv("DB_DRIVER", "postgres")
 	cfg.DB.DSN = Getenv("DB_DSN", "postgres://rss:rss@localhost:5432/rss?sslmode=disable")
 	cfg.Telegram.BotToken = os.Getenv("TELEGRAM_BOT_TOKEN")
 	cfg.Email.Address = Getenv("EMAIL_ADDRESS", "")

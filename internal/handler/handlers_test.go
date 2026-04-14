@@ -444,6 +444,10 @@ func (r *handlerFeedRepoStub) MarkFetchError(context.Context, string, string) er
 	return nil
 }
 
+func (r *handlerFeedRepoStub) MarkInitialized(context.Context, string, time.Time) error {
+	return nil
+}
+
 func (r *handlerFeedRepoStub) GetByID(context.Context, string) (domain.Feed, error) {
 	if r.getByIDFeed.ID == "" {
 		return domain.Feed{ID: "feed-1", BatchWindowSecs: 3600}, nil

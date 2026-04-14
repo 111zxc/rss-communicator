@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/111zxc/rss-communicator/internal/domain"
-	"github.com/111zxc/rss-communicator/internal/repository/postgres"
+	"github.com/111zxc/rss-communicator/internal/repository"
 	"github.com/111zxc/rss-communicator/internal/runtime"
 	"github.com/111zxc/rss-communicator/internal/runtime/queue"
 )
@@ -25,7 +25,7 @@ type DeliverWorkerConfig struct {
 }
 
 type DeliverWorker struct {
-	db          *postgres.DB
+	db          repository.Store
 	q           queue.Queue
 	log         *slog.Logger
 	sender      DeliverySender
@@ -36,7 +36,7 @@ type DeliverWorker struct {
 }
 
 func NewDeliverWorker(
-	db *postgres.DB,
+	db repository.Store,
 	q queue.Queue,
 	log *slog.Logger,
 	sender DeliverySender,

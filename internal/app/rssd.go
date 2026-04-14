@@ -9,9 +9,10 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
 	"github.com/111zxc/rss-communicator/internal/config"
+	"github.com/111zxc/rss-communicator/internal/database"
 	appemail "github.com/111zxc/rss-communicator/internal/email"
 	"github.com/111zxc/rss-communicator/internal/handler"
-	"github.com/111zxc/rss-communicator/internal/repository/postgres"
+	"github.com/111zxc/rss-communicator/internal/repository"
 	"github.com/111zxc/rss-communicator/internal/rss"
 	"github.com/111zxc/rss-communicator/internal/runtime"
 	"github.com/111zxc/rss-communicator/internal/runtime/queue/memory"
@@ -24,17 +25,17 @@ import (
 )
 
 type RSSD struct {
-	db  *postgres.DB
+	db  repository.Database
 	log *slog.Logger
 }
 
-func NewRSSD(db *postgres.DB, log *slog.Logger) *RSSD {
+func NewRSSD(db repository.Database, log *slog.Logger) *RSSD {
 	return &RSSD{db: db, log: log}
 }
 
 func RunRSSD(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	// DB
-	db, err := postgres.New(cfg.DB.DSN)
+	db, err := database.Open(cfg.DB.Driver, cfg.DB.DSN)
 	if err != nil {
 		log.Error("db connect failed", "err", err)
 		return err
@@ -45,6 +46,8 @@ func RunRSSD(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		log.Error("db ping failed", "err", err)
 		return err
 	}
+
+	log.Info("db connected", "driver", cfg.DB.Driver)
 
 	// In-proc queue
 	q := memory.New()
