@@ -15,7 +15,7 @@ import (
 	"github.com/111zxc/rss-communicator/internal/repository"
 	"github.com/111zxc/rss-communicator/internal/rss"
 	"github.com/111zxc/rss-communicator/internal/runtime"
-	"github.com/111zxc/rss-communicator/internal/runtime/queue/memory"
+	"github.com/111zxc/rss-communicator/internal/runtime/queuefactory"
 	"github.com/111zxc/rss-communicator/internal/runtime/worker"
 	"github.com/111zxc/rss-communicator/internal/senders"
 	emailsender "github.com/111zxc/rss-communicator/internal/senders/email"
@@ -49,15 +49,47 @@ func RunRSSD(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 
 	log.Info("db connected", "driver", cfg.DB.Driver)
 
-	// In-proc queue
-	q := memory.New()
+	recovered, err := db.Deliveries().RecoverInProgress(ctx, time.Now().UTC())
+	if err != nil {
+		log.Error("delivery recovery failed", "err", err)
+		return err
+	}
+	if recovered > 0 {
+		log.Warn("recovered stuck deliveries after restart", "count", recovered)
+	}
+
+	q, err := queuefactory.Open(cfg.Queue.Driver, queuefactory.NATSConfig{
+		URL:         cfg.Queue.NATSURL,
+		Stream:      cfg.Queue.NATSStream,
+		SubjectRoot: cfg.Queue.NATSSubjectRoot,
+		AckWait:     cfg.Queue.NATSAckWait,
+	})
+	if err != nil {
+		log.Error("queue init failed", "driver", cfg.Queue.Driver, "err", err)
+		return err
+	}
 	defer func() { _ = q.Close() }()
+
+	op := runtime.NewOutboxPublisher(
+		db.Outbox(),
+		q,
+		log,
+		cfg.Queue.OutboxPublishTick,
+		cfg.Queue.OutboxPublishLease,
+		cfg.Queue.OutboxPublishBatch,
+		runtime.Backoff{Base: cfg.Queue.OutboxPublishRetryBase, Max: cfg.Queue.OutboxPublishRetryMax},
+	)
+	go func() {
+		if err := op.Run(ctx); err != nil && err != context.Canceled {
+			log.Error("outbox publisher stopped with error", "err", err)
+		}
+	}()
 
 	// Fetcher
 	fetcher := rss.NewFetcher()
 
 	// Fetch worker
-	fw := worker.NewFetchWorker(db, q, log, fetcher)
+	fw := worker.NewFetchWorker(db, q, db.Outbox(), log, fetcher)
 	if err := fw.Subscribe(ctx); err != nil {
 		log.Error("fetch worker subscribe failed", "err", err)
 		return err
@@ -66,7 +98,7 @@ func RunRSSD(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	// Retry scheduler
 	rs := runtime.NewRetryScheduler(
 		db.Deliveries(),
-		q,
+		db.Outbox(),
 		log,
 		cfg.RSSD.RetryScheduleTick,
 		cfg.RSSD.RetryBatch,
@@ -115,7 +147,7 @@ func RunRSSD(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	}
 
 	// Scheduler (publishes fetch jobs)
-	s := runtime.NewScheduler(db, q, log, cfg.RSSD.ScheduleTick, cfg.RSSD.FetchBatch)
+	s := runtime.NewScheduler(db, db.Outbox(), log, cfg.RSSD.ScheduleTick, cfg.RSSD.FetchBatch)
 	go func() {
 		if err := s.Run(ctx); err != nil && err != context.Canceled {
 			log.Error("scheduler stopped with error", "err", err)
@@ -124,6 +156,7 @@ func RunRSSD(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 
 	log.Info("rssd started",
 		"schedule_tick", cfg.RSSD.ScheduleTick.String(),
+		"queue_driver", cfg.Queue.Driver,
 		"fetch_batch_limit", cfg.RSSD.FetchBatch,
 		"deliver_workers", cfg.RSSD.DeliveryWorkers,
 		"tg_rps", cfg.RSSD.TelegramRPS,

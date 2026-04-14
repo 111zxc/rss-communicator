@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"time"
 
@@ -11,15 +10,15 @@ import (
 )
 
 type Scheduler struct {
-	db    repository.Store
-	q     queue.Queue
-	log   *slog.Logger
-	tick  time.Duration
-	limit int
+	db     repository.Store
+	outbox repository.OutboxRepository
+	log    *slog.Logger
+	tick   time.Duration
+	limit  int
 }
 
-func NewScheduler(db repository.Store, q queue.Queue, log *slog.Logger, tick time.Duration, limit int) *Scheduler {
-	return &Scheduler{db: db, q: q, log: log, tick: tick, limit: limit}
+func NewScheduler(db repository.Store, outbox repository.OutboxRepository, log *slog.Logger, tick time.Duration, limit int) *Scheduler {
+	return &Scheduler{db: db, outbox: outbox, log: log, tick: tick, limit: limit}
 }
 
 func (s *Scheduler) Run(ctx context.Context) error {
@@ -40,8 +39,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 				continue
 			}
 			for _, f := range feeds {
-				b, _ := json.Marshal(queue.FetchJob{FeedID: f.ID})
-				_ = s.q.Publish(ctx, queue.TopicFetch, b)
+				_ = s.outbox.Enqueue(ctx, string(queue.TopicFetch), queue.FetchJob{FeedID: f.ID}, now)
 			}
 		}
 	}

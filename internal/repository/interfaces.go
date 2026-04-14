@@ -104,6 +104,7 @@ type ItemsRepo interface {
 type DeliveriesRepository interface {
 	CreatePendingIfNotExists(ctx context.Context, contactID, itemID string, availableAt time.Time) (created bool, deliveryID string, err error)
 	ClaimBatch(ctx context.Context, deliveryID string, now time.Time) (domain.Contact, domain.Feed, []domain.DeliveryWithItem, error)
+	RecoverInProgress(ctx context.Context, now time.Time) (int64, error)
 	MarkSent(ctx context.Context, deliveryID string, sentAt time.Time) error
 	MarkManySent(ctx context.Context, deliveryIDs []string, sentAt time.Time) error
 	MarkFailed(ctx context.Context, deliveryID string, errMsg string, nextRetryAt *time.Time) error
@@ -111,8 +112,18 @@ type DeliveriesRepository interface {
 	ListRetryDue(ctx context.Context, now time.Time, limit int, maxAttempts int) ([]string, error)
 }
 
+type OutboxMessage struct {
+	ID           string
+	Topic        string
+	Payload      []byte
+	AttemptCount int
+}
+
 type OutboxRepository interface {
 	Enqueue(ctx context.Context, topic string, payload any, availableAt time.Time) error
+	ClaimBatch(ctx context.Context, now time.Time, leaseUntil time.Time, limit int) ([]OutboxMessage, error)
+	MarkPublished(ctx context.Context, id string) error
+	MarkFailed(ctx context.Context, id string, errMsg string, nextAvailableAt time.Time) error
 }
 
 type Clock interface {

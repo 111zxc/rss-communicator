@@ -2,10 +2,10 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"time"
 
+	"github.com/111zxc/rss-communicator/internal/repository"
 	"github.com/111zxc/rss-communicator/internal/runtime/queue"
 )
 
@@ -15,17 +15,17 @@ type RetryLister interface {
 
 type RetryScheduler struct {
 	lister      RetryLister
-	q           queue.Queue
+	outbox      repository.OutboxRepository
 	log         *slog.Logger
 	tick        time.Duration
 	limit       int
 	maxAttempts int
 }
 
-func NewRetryScheduler(lister RetryLister, q queue.Queue, log *slog.Logger, tick time.Duration, limit int, maxAttempts int) *RetryScheduler {
+func NewRetryScheduler(lister RetryLister, outbox repository.OutboxRepository, log *slog.Logger, tick time.Duration, limit int, maxAttempts int) *RetryScheduler {
 	return &RetryScheduler{
 		lister:      lister,
-		q:           q,
+		outbox:      outbox,
 		log:         log,
 		tick:        tick,
 		limit:       limit,
@@ -51,8 +51,7 @@ func (s *RetryScheduler) Run(ctx context.Context) error {
 				continue
 			}
 			for _, id := range ids {
-				b, _ := json.Marshal(queue.DeliverJob{DeliveryID: id})
-				_ = s.q.Publish(ctx, queue.TopicDeliver, b)
+				_ = s.outbox.Enqueue(ctx, string(queue.TopicDeliver), queue.DeliverJob{DeliveryID: id}, now)
 			}
 		}
 	}

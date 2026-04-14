@@ -15,12 +15,13 @@ import (
 type FetchWorker struct {
 	db      repository.Store
 	q       queue.Queue
+	outbox  repository.OutboxRepository
 	log     *slog.Logger
 	fetcher *rss.Fetcher
 }
 
-func NewFetchWorker(db repository.Store, q queue.Queue, log *slog.Logger, fetcher *rss.Fetcher) *FetchWorker {
-	return &FetchWorker{db: db, q: q, log: log, fetcher: fetcher}
+func NewFetchWorker(db repository.Store, q queue.Queue, outbox repository.OutboxRepository, log *slog.Logger, fetcher *rss.Fetcher) *FetchWorker {
+	return &FetchWorker{db: db, outbox: outbox, q: q, log: log, fetcher: fetcher}
 }
 
 func (w *FetchWorker) Subscribe(ctx context.Context) error {
@@ -119,8 +120,7 @@ func (w *FetchWorker) process(ctx context.Context, feedID string) {
 			if f.BatchEnabled {
 				continue
 			}
-			b, _ := json.Marshal(queue.DeliverJob{DeliveryID: deliveryID})
-			_ = w.q.Publish(ctx, queue.TopicDeliver, b)
+			_ = w.outbox.Enqueue(ctx, string(queue.TopicDeliver), queue.DeliverJob{DeliveryID: deliveryID}, availableAt)
 		}
 	}
 }

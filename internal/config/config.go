@@ -32,6 +32,21 @@ type HTTPConfig struct {
 	IdleTimeout  time.Duration
 }
 
+type QueueConfig struct {
+	Driver string
+
+	OutboxPublishTick      time.Duration
+	OutboxPublishBatch     int
+	OutboxPublishLease     time.Duration
+	OutboxPublishRetryBase time.Duration
+	OutboxPublishRetryMax  time.Duration
+
+	NATSURL         string
+	NATSStream      string
+	NATSSubjectRoot string
+	NATSAckWait     time.Duration
+}
+
 type EmailConfig struct {
 	Address     string
 	DisplayName string
@@ -62,8 +77,9 @@ type Config struct {
 		AddSource bool
 	}
 
-	HTTP HTTPConfig
-	RSSD RSSDConfig
+	Queue QueueConfig
+	HTTP  HTTPConfig
+	RSSD  RSSDConfig
 }
 
 func MustLoad() Config {
@@ -88,7 +104,18 @@ func MustLoad() Config {
 	cfg.Log.Format = Getenv("LOG_FORMAT", "json")
 	cfg.Log.AddSource = MustBool(Getenv("LOG_ADD_SOURCE", "false"))
 
-	cfg.HTTP.Addr = Getenv("HTTP_ADDR", ":8080")
+	cfg.Queue.Driver = Getenv("QUEUE_DRIVER", "memory")
+	cfg.Queue.OutboxPublishTick = MustDuration(Getenv("OUTBOX_PUBLISH_TICK", "1s"))
+	cfg.Queue.OutboxPublishBatch = MustInt(Getenv("OUTBOX_PUBLISH_BATCH", "200"))
+	cfg.Queue.OutboxPublishLease = MustDuration(Getenv("OUTBOX_PUBLISH_LEASE", "30s"))
+	cfg.Queue.OutboxPublishRetryBase = MustDuration(Getenv("OUTBOX_PUBLISH_RETRY_BASE", "1s"))
+	cfg.Queue.OutboxPublishRetryMax = MustDuration(Getenv("OUTBOX_PUBLISH_RETRY_MAX", "1m"))
+	cfg.Queue.NATSURL = Getenv("NATS_URL", "nats://127.0.0.1:4222")
+	cfg.Queue.NATSStream = Getenv("NATS_STREAM", "RSS_COMMUNICATOR")
+	cfg.Queue.NATSSubjectRoot = Getenv("NATS_SUBJECT_ROOT", "rss")
+	cfg.Queue.NATSAckWait = MustDuration(Getenv("NATS_ACK_WAIT", "5m"))
+
+	cfg.HTTP.Addr = Getenv("HTTP_ADDR", "127.0.0.1:8080")
 	cfg.HTTP.ReadTimeout = MustDuration(Getenv("HTTP_READ_TIMEOUT", "5s"))
 	cfg.HTTP.WriteTimeout = MustDuration(Getenv("HTTP_WRITE_TIMEOUT", "10s"))
 	cfg.HTTP.IdleTimeout = MustDuration(Getenv("HTTP_IDLE_TIMEOUT", "60s"))

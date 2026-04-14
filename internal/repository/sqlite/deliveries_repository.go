@@ -86,6 +86,18 @@ func (r *DeliveriesRepository) ClaimBatch(ctx context.Context, deliveryID string
 	return contact, feed, batch, nil
 }
 
+func (r *DeliveriesRepository) RecoverInProgress(ctx context.Context, now time.Time) (int64, error) {
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE deliveries
+		SET status='failed', last_error=$1, next_retry_at=$2, updated_at=CURRENT_TIMESTAMP
+		WHERE status='in_progress'
+	`, "delivery recovered after process restart", now)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func (r *DeliveriesRepository) MarkSent(ctx context.Context, deliveryID string, sentAt time.Time) error {
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE deliveries SET status='sent', sent_at=$2, next_retry_at=NULL, updated_at=CURRENT_TIMESTAMP
