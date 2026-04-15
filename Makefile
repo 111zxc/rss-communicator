@@ -11,7 +11,7 @@ ifeq ($(DB_DRIVER),sqlite)
 GOOSE_DRIVER := sqlite3
 endif
 
-.PHONY: help deps fmt lint test build build-rssd build-tg run-rssd run-tg db-up db-down migrate-up migrate-down migrate-up-postgres migrate-down-postgres migrate-up-sqlite migrate-down-sqlite compose-up compose-down
+.PHONY: help deps fmt lint test build build-rssd build-tg run-rssd run-tg db-up db-down migrate-up migrate-down migrate-up-postgres migrate-down-postgres migrate-up-sqlite migrate-down-sqlite compose-up compose-down compose-up-sqlite-memory compose-up-postgres-memory compose-up-sqlite-nats compose-up-postgres-nats
 
 help:
 	@echo "Targets:"
@@ -23,6 +23,10 @@ help:
 	@echo "  run-tg         - run tg-bot locally"
 	@echo "  compose-up     - docker compose up -d"
 	@echo "  compose-down   - docker compose down"
+	@echo "  compose-up-sqlite-memory   - docker compose profile sqlite-memory"
+	@echo "  compose-up-postgres-memory - docker compose profile postgres-memory"
+	@echo "  compose-up-sqlite-nats     - docker compose profile sqlite-nats"
+	@echo "  compose-up-postgres-nats   - docker compose profile postgres-nats"
 	@echo "  migrate-up     - goose up for DB_DRIVER=$(DB_DRIVER)"
 	@echo "  migrate-down   - goose down (1 step) for DB_DRIVER=$(DB_DRIVER)"
 	@echo "  migrate-up-postgres   - goose up for postgres"
@@ -57,6 +61,18 @@ run-tg:
 
 compose-up:
 	docker compose up -d --build
+
+compose-up-sqlite-memory:
+	docker compose --profile sqlite-memory up -d --build
+
+compose-up-postgres-memory:
+	docker compose --profile postgres-memory up -d --build
+
+compose-up-sqlite-nats:
+	docker compose --profile sqlite-nats up -d --build
+
+compose-up-postgres-nats:
+	docker compose --profile postgres-nats up -d --build
 
 compose-down:
 	docker compose down

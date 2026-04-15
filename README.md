@@ -1,47 +1,46 @@
 # rss-communicator
 
-The service now supports two database backends:
+`rss-communicator` - отправляет рсс ленты =)
 
-- `postgres` for multi-process or heavier deployments
-- `sqlite` for single-node/self-hosted deployments on a small VPS
+- `rssd` - HTTP API и рантайм-воркеры
+- `tg-bot` - Telegram-бот
 
-Queue backends:
+## варианты контактов
 
-- `memory` for single-process/in-memory runtime jobs
-- `nats` for durable broker-backed job transport via JetStream
+http telega email
 
-Runtime config:
+## хранилище
 
-```env
-DB_DRIVER=postgres
-DB_DSN=postgres://rss:rss@localhost:5432/rss?sslmode=disable
-QUEUE_DRIVER=memory
+postgre/sqlite
+
+## очередь
+
+inmem/nats
+
+## usage
+
+```bash
+make build
+make test
+make run-rssd
+make run-tg
 ```
 
-SQLite example:
+### Docker Compose
 
-```env
-DB_DRIVER=sqlite
-DB_DSN=file:rss.db
+```bash
+make compose-up
+make compose-down
 ```
 
-NATS example:
-
-```env
-QUEUE_DRIVER=nats
-NATS_URL=nats://127.0.0.1:4222
-NATS_STREAM=RSS_COMMUNICATOR
-NATS_SUBJECT_ROOT=rss
+```bash
+make compose-up-sqlite-memory
+make compose-up-postgres-memory
+make compose-up-sqlite-nats
+make compose-up-postgres-nats
 ```
 
-Jobs are now published durably through the database `outbox` and then forwarded to the selected queue backend. Delivery semantics are `at-least-once`.
-
-Migrations are split by dialect:
-
-- `migrations/postgres`
-- `migrations/sqlite`
-
-Examples:
+### Миграции
 
 ```bash
 make migrate-up-postgres DB_DSN=postgres://rss:rss@localhost:5432/rss?sslmode=disable
